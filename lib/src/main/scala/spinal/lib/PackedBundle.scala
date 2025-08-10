@@ -33,17 +33,17 @@ class PackedBundle extends Bundle {
     var highBit = 0
     val mapping = ArrayBuffer[(Range, Data)]()
 
-    def addData(d: Data): Unit = {
+    def addData(d: Data, bitsWidth: Int): Unit = {
       val r = d.getTag(classOf[TagBitPackExact]) match {
         case t: Some[TagBitPackExact] =>
           val origRange = t.get.range
 
           // Check if the tagged range is too large for the data
-          if (origRange.size <= d.getBitsWidth) {
+          if (origRange.size <= bitsWidth) {
             origRange
           } else {
             // Need to truncate the tagged range to the size of the actual data
-            val newSize = origRange.size.min(d.getBitsWidth)
+            val newSize = origRange.size.min(bitsWidth)
 
             // Retain the range directionality
             if (origRange.step > 0) {
@@ -55,7 +55,7 @@ class PackedBundle extends Bundle {
 
         case None =>
           // Assume the full range of the data with the MSB as the highest bit
-          (nextPos + d.getBitsWidth - 1) downto (nextPos)
+          (nextPos + bitsWidth - 1) downto (nextPos)
       }
       nextPos = r.high + 1
 
@@ -108,17 +108,15 @@ class PackedBundle extends Bundle {
       if ((elRange.low >= lo && elRange.low < hi) || (elRange.high >= lo && elRange.high < hi)) {
         if (elRange.step > 0) {
           // "Little endian" -- ascending range
-          val subBits = bits(elRange).resize(el.getBitsWidth)
           el match {
-            case subPacked: PackedBundle => subPacked.unpack(subBits)
-            case _                       => el.assignFromBits(subBits)
+            case subPacked: PackedBundle => subPacked.unpack(bits(elRange).resize(subPacked.getPackedWidth))
+            case _                       => el.assignFromBits(bits(elRange).resize(el.getBitsWidth))
           }
         } else {
           // "Big endian" -- descending range
-          val subBits = bits(elRange).resizeLeft(el.getBitsWidth)
           el match {
-            case subPacked: PackedBundle => subPacked.unpack(subBits)
-            case _                       => el.assignFromBits(subBits)
+            case subPacked: PackedBundle => subPacked.unpack(bits(elRange).resizeLeft(subPacked.getPackedWidth))
+            case _                       => el.assignFromBits(bits(elRange).resizeLeft(el.getBitsWidth))
           }
         }
       }
@@ -182,8 +180,10 @@ class PackedBundle extends Bundle {
 
     // Process the data
     ref match {
+      case pb: PackedBundle =>
+        mapBuilder.addData(pb.asData, pb.getPackedWidth)
       case d: Data =>
-        mapBuilder.addData(d)
+        mapBuilder.addData(d, d.getBitsWidth)
       case _ =>
     }
   }
