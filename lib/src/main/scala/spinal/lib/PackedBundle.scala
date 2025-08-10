@@ -79,20 +79,26 @@ class PackedBundle extends Bundle {
     val maxWidth = mappings.map(_._1.high).max + 1
     val packed = B(0, maxWidth bit).allowOverride()
     for ((range, data) <- mappings) {
+      // Get the width of the data while accounting for nested PackedBundles
+      val bitsWidth = data match {
+        case pb: PackedBundle => pb.getPackedWidth
+        case _                => data.getBitsWidth
+      }
+
       if (range.step > 0) {
         // "Little endian" -- ascending range
         val subBits = data match {
           case subPacked: PackedBundle => subPacked.packed
           case _                       => data.asBits
         }
-        packed(range) := subBits.takeLow(range.size.min(data.getBitsWidth)).resize(range.size)
+        packed(range) := subBits.takeLow(range.size.min(bitsWidth)).resize(range.size)
       } else {
         // "Big endian" -- descending range
         val subBits = data match {
           case subPacked: PackedBundle => subPacked.packed
           case _                       => data.asBits
         }
-        packed(range) := subBits.takeHigh(range.size.min(data.getBitsWidth)).resizeLeft(range.size)
+        packed(range) := subBits.takeHigh(range.size.min(bitsWidth)).resizeLeft(range.size)
       }
     }
     packed
@@ -102,21 +108,29 @@ class PackedBundle extends Bundle {
 
   def unpack(bits: Bits, hi: Int, lo: Int): Unit = {
     for ((elRange, el) <- mappings) {
+      // Get the width of the data while accounting for nested PackedBundles
+      val bitsWidth = el match {
+        case pb: PackedBundle => pb.getPackedWidth
+        case _                => el.getBitsWidth
+      }
+
       // Check if the assignment range falls within the current data's range
       // This happens when the data range's high or low falls within the assignment's hi and lo
       // ...or whenever lo isn't past the data range's high and hi isn't below the data range's low
       if ((elRange.low >= lo && elRange.low < hi) || (elRange.high >= lo && elRange.high < hi)) {
         if (elRange.step > 0) {
           // "Little endian" -- ascending range
+          val subBits = bits(elRange).resize(bitsWidth)
           el match {
-            case subPacked: PackedBundle => subPacked.unpack(bits(elRange).resize(subPacked.getPackedWidth))
-            case _                       => el.assignFromBits(bits(elRange).resize(el.getBitsWidth))
+            case subPacked: PackedBundle => subPacked.unpack(subBits)
+            case _                       => el.assignFromBits(subBits)
           }
         } else {
           // "Big endian" -- descending range
+          val subBits = bits(elRange).resizeLeft(bitsWidth)
           el match {
-            case subPacked: PackedBundle => subPacked.unpack(bits(elRange).resizeLeft(subPacked.getPackedWidth))
-            case _                       => el.assignFromBits(bits(elRange).resizeLeft(el.getBitsWidth))
+            case subPacked: PackedBundle => subPacked.unpack(subBits)
+            case _                       => el.assignFromBits(subBits)
           }
         }
       }
