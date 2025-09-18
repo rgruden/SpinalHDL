@@ -120,6 +120,7 @@ case class APlic(p: APlicDomainParam,
   val sourceIds = sourceParams.map(_.id)
   require(sourceIds.distinct.size == sourceIds.size, "APlic requires no duplicate interrupt source")
   require(hartIds.distinct.size == hartIds.size, "APlic requires no duplicate harts")
+  require(p.genParam.withDirect || p.genParam.withMSI, "At least one delivery mode should be enabled")
 
   val sources = Bits(sourceIds.size bits)
   val childSources = Vec(childInfos.map(childInfo => Bits(childInfo.sourceIds.size bits)))
@@ -130,11 +131,15 @@ case class APlic(p: APlicDomainParam,
   val interruptDelegatable = for (sourceId <- sourceIds) yield childInterruptIds.find(_ == sourceId).isDefined
 
   val deliveryEnable = RegInit(False)
-  val isMSI = False
+  val isMSI = ((p.genParam.withDirect, p.genParam.withMSI): @unchecked) match {
+    case (true, true) => RegInit(False)
+    case (false, true) => True
+    case (true, false) => False
+  }
   val bigEndian = False
 
   val interrupts: Seq[APlicSource] = for (((param, delegatable), i) <- sourceParams.zip(interruptDelegatable).zipWithIndex)
-    yield APlicSource(param, APlicSourceState(delegatable, isMSI, sources(i)))
+    yield APlicSource(param, APlicSourceState(delegatable, p.genParam.withDirect, p.genParam.withMSI, isMSI, sources(i)))
 
   val childMappings = for ((childInfo, childSource) <- childInfos.zip(childSources)) yield new Area {
     for ((childSourceId, idx) <- childInfo.sourceIds.zipWithIndex) yield new Area {
@@ -148,7 +153,108 @@ case class APlic(p: APlicDomainParam,
     }
   }
 
-  val direct = new Area {
+  val msiaddrcfg = (p.genParam.withMSI || p.genParam._withMsiAddrcfg) generate new Area {
+    val m = new Area {
+      val (lock, hhxs, lhxs, hhxw, lhxw, ppn) = if (p.isRoot) {
+        (RegInit(Bool(p.genParam._lockMSI)),
+         RegInit(U(p.genParam._MMsiParams.hhxs, 5 bits)),
+         RegInit(U(p.genParam._MMsiParams.lhxs, 3 bits)),
+         RegInit(U(p.genParam._MMsiParams.hhxw, 3 bits)),
+         RegInit(U(p.genParam._MMsiParams.lhxw, 4 bits)),
+         RegInit(U(p.genParam._MMsiParams.base >> 12, 44 bits)))
+      } else {
+        (mmsiaddrcfg(63),
+         mmsiaddrcfg(60 downto 56),
+         mmsiaddrcfg(54 downto 52),
+         mmsiaddrcfg(50 downto 48),
+         mmsiaddrcfg(47 downto 44),
+         mmsiaddrcfg(43 downto 0))
+      }
+
+      val msiaddrcfg = if (p.isRoot) {
+        U(64 bits, 63            -> lock,
+                  (60 downto 56) -> hhxs,
+                  (54 downto 52) -> lhxs,
+                  (50 downto 48) -> hhxw,
+                  (47 downto 44) -> lhxw,
+                  (43 downto 0)  -> ppn,
+                  default        -> False)
+      } else {
+        mmsiaddrcfg
+      }
+
+      val maskH = (U(1) << hhxw) - 1
+      val maskL = (U(1) << lhxw) - 1
+
+      val msiaddrcfgCovered = lock.mux(
+        True  -> U(64 bits, 63 -> True, default -> False),
+        False -> msiaddrcfg
+      )
+
+      if (p.isRoot) {
+        mmsiaddrcfg := msiaddrcfg
+      }
+    }
+
+    val s = new Area {
+      val (ppn, lhxs) = if (p.isRoot) {
+        (RegInit(U(p.genParam._SMsiParams.base >> 12, 44 bits)),
+         RegInit(U(p.genParam._SMsiParams.lhxs, 3 bits)))
+      } else {
+        (smsiaddrcfg(43 downto 0), smsiaddrcfg(54 downto 52))
+      }
+
+      val msiaddrcfg = if (p.isRoot) {
+        U(64 bits, 63             -> m.lock,
+                   (60 downto 56) -> m.hhxs,
+                   (54 downto 52) -> lhxs,
+                   (50 downto 48) -> m.hhxw,
+                   (47 downto 44) -> m.lhxw,
+                   (43 downto 0)  -> ppn,
+                   default        -> False)
+      } else {
+        smsiaddrcfg
+      }
+
+      val msiaddrcfgCovered = m.lock.mux(
+        True  -> U(0),
+        False -> msiaddrcfg
+      )
+
+      if (p.isRoot) {
+        smsiaddrcfg := msiaddrcfg
+      }
+    }
+
+    def msiAddress(hartIndex: UInt, guestIndex: UInt = 0): UInt = {
+      val groupId = (hartIndex >> m.lhxw) & m.maskH.resized
+      val hartId = hartIndex & m.maskL.resized
+      val groupOffset = groupId << (m.hhxs + 12)
+      val lhxs = if (p.isMDomain) m.lhxs else s.lhxs
+      val ppn = if (p.isMDomain) m.ppn else s.ppn
+      val hartOffset = hartId << lhxs
+
+      val msiaddr = (ppn | groupOffset.resized | hartOffset.resized | guestIndex.resized) << 12
+      msiaddr
+    }
+  }
+
+  val msi = p.genParam.withMSI generate new Area {
+    val gateway = new APlicMSIGateway(interrupts, deliveryEnable)
+
+    val gatewayStream = gateway.requestStream.map(req => {
+      val payload = APlicMsiPayload()
+      payload.address := msiaddrcfg.msiAddress(req.target.hartId, req.target.guestId).resized
+      payload.data := req.target.eiid.resized
+      payload
+    })
+
+    val genmsiStream = Stream(APlicMsiPayload())
+
+    val msiStream = StreamArbiterFactory().lowerFirst.noLock.onArgs(gatewayStream, genmsiStream)
+  }
+
+  val direct = p.genParam.withDirect generate new Area {
     val gateways = for (hartId <- hartIds) yield new APlicDirectGateway(interrupts, hartId, p.genParam.withIForce)
 
     val targets = Mux(isMSI, B(0), gateways.map(_.iep && deliveryEnable).asBits())

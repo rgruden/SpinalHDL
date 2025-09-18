@@ -40,3 +40,25 @@ case class APlicDirectGateway(interrupts: Seq[APlicSource], hartId: Int, allowSp
     }
   }
 }
+
+case class APlicMSIGateway(interrupts: Seq[APlicSource], delivery: Bool) extends Area {
+  val maxSource = (interrupts.map(_.id) ++ Seq(0)).max + 1
+  val idWidth = log2Up(maxSource)
+
+  val requests = interrupts.sortBy(_.id).map(_.asMSIRequest(idWidth))
+
+  val resultRequest = requests.reduceBalancedTree((a, b) => {
+    val takeA = a.prioritize(b)
+    takeA ? a | b
+  })
+
+  val requestStream = Stream(APlicMSIRequest(widthOf(resultRequest.id)))
+  val requestStreamValidMask = requestStream.valid
+
+  requestStream.valid   := resultRequest.pending(0) && delivery
+  requestStream.payload := resultRequest.asInstanceOf[APlicMSIRequest]
+
+  when (requestStream.fire) {
+    APlic.doClaim(interrupts, requestStream.payload.id)
+  }
+}

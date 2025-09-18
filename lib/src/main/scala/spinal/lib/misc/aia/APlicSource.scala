@@ -68,10 +68,34 @@ case class APlicMSITarget() extends Bundle {
   val eiid = UInt(11 bits)
 }
 
+case class APlicMSIRequest(idWidth: Int) extends APlicGenericRequest(idWidth) {
+  val target = APlicMSITarget()
+  val keep = RegNext(valid) init(False)
+
+  override def prioritize(other: APlicGenericRequest): Bool = {
+    val x = other.asInstanceOf[APlicMSIRequest]
+    !x.valid || (valid && id <= x.id)
+  }
+
+  override def pending(threshold: UInt): Bool = {
+    valid
+  }
+
+  override def dummy(): APlicGenericRequest = {
+    val tmp = APlicMSIRequest(idWidth)
+    tmp.target.assignDontCare()
+    tmp.id := 0
+    tmp.valid := False
+    tmp
+  }
+}
+
 case class APlicSourceParam(id: Int, mode: InterruptMode)
 
 case class APlicSourceState(
   withDelegation: Boolean,
+  withDirect: Boolean,
+  withMSI: Boolean,
   msiState: Bool,
   input: Bool
 )
@@ -94,8 +118,13 @@ abstract class APlicSource(sourceId: Int, state: APlicSourceState) extends Area 
 
   /* target field */
   val targetId = RegInit(U(0x0, 14 bits))
-  val direct = new Area {
+  val direct = state.withDirect generate new Area {
     val prio = RegInit(U(1, 8 bits))
+  }
+
+  val msi = state.withMSI generate new Area {
+    val guestId = RegInit(U(0x0, 6 bits))
+    val eiid = RegInit(U(0x0, 11 bits))
   }
 
   val rectified = Bool()
@@ -132,6 +161,17 @@ abstract class APlicSource(sourceId: Int, state: APlicSourceState) extends Area 
     ret.id := U(id)
     ret.valid := ip && enable && (targetId === targetHart)
     ret.prio := direct.prio
+    ret
+  }
+
+  def asMSIRequest(idWidth: Int): APlicGenericRequest = {
+    val ret = new APlicMSIRequest(idWidth)
+    val enable = (ie || ret.keep) && isMSI
+    ret.target.hartId := targetId
+    ret.target.guestId := msi.guestId
+    ret.target.eiid := msi.eiid
+    ret.id := U(id)
+    ret.valid := ip && enable
     ret
   }
 

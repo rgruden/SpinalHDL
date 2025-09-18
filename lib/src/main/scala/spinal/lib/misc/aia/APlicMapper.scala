@@ -3,6 +3,7 @@ package spinal.lib.misc.aia
 import spinal.core._
 import spinal.lib._
 import spinal.lib.bus.misc.{BusSlaveFactory, AllMapping, SingleMapping}
+
 import scala.collection.mutable.ArrayBuffer
 
 object APlicMapping {
@@ -50,6 +51,99 @@ object APlicMapper {
       bus.readAndWrite(aplic.deliveryEnable, address = domaincfgOffset, bitOffset = 8)
       bus.read(aplic.isMSI, address = domaincfgOffset, bitOffset = 2)
       bus.readAndWrite(aplic.bigEndian, address = domaincfgOffset, bitOffset = 0)
+
+      if (p.genParam.withMSI && p.genParam.withDirect) {
+        bus.write(aplic.isMSI, address = domaincfgOffset, bitOffset = 2)
+      }
+    }
+
+    // mapping MSIADDRCFG, MSIADDRCFGH
+    val msiaddrcfg = (p.genParam.withMSI || p.genParam._withMsiAddrcfg) generate new Area {
+      val addrcfg = aplic.msiaddrcfg
+
+      bus.read(addrcfg.m.msiaddrcfgCovered(31 downto 0), address = mmsiaddrcfgOffset)
+      bus.read(addrcfg.m.msiaddrcfgCovered(63 downto 32), address = mmsiaddrcfghOffset)
+      bus.read(addrcfg.s.msiaddrcfgCovered(31 downto 0), address = smsiaddrcfgOffset)
+      bus.read(addrcfg.s.msiaddrcfgCovered(63 downto 32), address = smsiaddrcfghOffset)
+
+      val addrcfgWrite = aplic.p.isRoot generate new Area {
+        val allowWrite = !addrcfg.m.lock
+
+        val mmsiaddrcfgh = bus.createAndDriveFlow(UInt(32 bits), mmsiaddrcfghOffset)
+        when(mmsiaddrcfgh.valid && allowWrite) {
+          addrcfg.m.lock := mmsiaddrcfgh.payload(31)
+          addrcfg.m.hhxs := mmsiaddrcfgh.payload(28 downto 24)
+          addrcfg.m.lhxs := mmsiaddrcfgh.payload(22 downto 20)
+          addrcfg.m.hhxw := mmsiaddrcfgh.payload(18 downto 16)
+          addrcfg.m.lhxw := mmsiaddrcfgh.payload(15 downto 12)
+          addrcfg.m.ppn(43 downto 32) := mmsiaddrcfgh.payload(11 downto 0)
+        }
+
+        val mmsiaddrcfg = bus.createAndDriveFlow(UInt(32 bits), mmsiaddrcfgOffset)
+        when(mmsiaddrcfg.valid && allowWrite) {
+          addrcfg.m.ppn(31 downto 0) := mmsiaddrcfg.payload
+        }
+
+        val smsiaddrcfgh = bus.createAndDriveFlow(UInt(32 bits), smsiaddrcfghOffset)
+        when(smsiaddrcfgh.valid && allowWrite) {
+          addrcfg.s.lhxs := smsiaddrcfgh.payload(22 downto 20)
+          addrcfg.s.ppn(43 downto 32) := smsiaddrcfgh.payload(11 downto 0)
+        }
+
+        val smsiaddrcfg = bus.createAndDriveFlow(UInt(32 bits), smsiaddrcfgOffset)
+        when(smsiaddrcfg.valid && allowWrite) {
+          addrcfg.s.ppn(31 downto 0) := smsiaddrcfg.payload
+        }
+      }
+    }
+
+    // mapping GENMSI
+    val msi = p.genParam.withMSI generate new Area {
+      val logic = aplic.msi
+      val addrcfg = aplic.msiaddrcfg
+
+      val genmsiPayload = Flow(APlicGenMsiPayload())
+      val genmsiFlow = bus.createAndDriveFlow(UInt(32 bits), genmsiOffset).discardWhen(genmsiPayload.valid || !aplic.isMSI)
+
+      // use register to store and wrap genmsiFlow's value
+      val rGenmsiFlow = new Area {
+        val valid = RegInit(False)
+        val hartId = RegInit(U(0, 14 bits))
+        val eiid = RegInit(U(0, 11 bits))
+
+        when(genmsiFlow.valid) {
+          valid := True
+          hartId := genmsiFlow.payload(31 downto 18)
+          eiid := genmsiFlow.payload(10 downto 0)
+        }
+      }
+
+      genmsiPayload.valid := rGenmsiFlow.valid
+      genmsiPayload.payload.hartId := rGenmsiFlow.hartId
+      genmsiPayload.payload.eiid := rGenmsiFlow.eiid
+
+      val genmsiPayloadStream = Stream(APlicGenMsiPayload())
+      genmsiPayloadStream.valid := genmsiPayload.valid && !logic.gateway.requestStreamValidMask
+      genmsiPayloadStream.payload := genmsiPayload.payload
+
+      when(genmsiPayloadStream.fire) {
+        rGenmsiFlow.valid := False
+        rGenmsiFlow.hartId := 0
+        rGenmsiFlow.eiid := 0
+      }
+
+      val genmsiStream = genmsiPayloadStream.map(param => {
+        val payload = APlicMsiPayload()
+        payload.address := addrcfg.msiAddress(param.hartId).resized
+        payload.data := param.eiid.resized
+        payload
+      })
+
+      logic.genmsiStream << genmsiStream
+
+      bus.read(genmsiPayload.payload.hartId, address = genmsiOffset, bitOffset = 18)
+      bus.read(genmsiPayload.valid, address = genmsiOffset, bitOffset = 12)
+      bus.read(genmsiPayload.payload.eiid, address = genmsiOffset, bitOffset = 0)
     }
 
     // mapping SETIPNUM, CLRIPNUM, SETIENUM, CLRIPNUM
@@ -96,6 +190,12 @@ object APlicMapper {
               interrupt.direct.prio := (prio === 0) ? U(1) | prio
             }
           }
+          if(p.genParam.withMSI) {
+            when(aplic.isMSI) {
+              interrupt.msi.guestId := configFlow.payload(17 downto 12)
+              interrupt.msi.eiid := configFlow.payload(10 downto 0)
+            }
+          }
         }
 
         val configViewList = ArrayBuffer[(Bool, Bits)]()
@@ -103,6 +203,12 @@ object APlicMapper {
           val view = B(18 bits, (7 downto 0) -> interrupt.direct.prio.asBits,
                                 default -> False)
           configViewList.addRet((False, view))
+        }
+        if (p.genParam.withMSI) {
+          val view = B(18 bits, (17 downto 12) -> interrupt.msi.guestId.asBits,
+                                (10 downto 0) -> interrupt.msi.eiid.asBits,
+                                default -> False)
+          configViewList.addRet((True, view))
         }
         val configView = aplic.isMSI.muxListDc(configViewList)
 
