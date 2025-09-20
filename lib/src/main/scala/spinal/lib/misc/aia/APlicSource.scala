@@ -152,7 +152,7 @@ abstract class APlicSource(sourceId: Int, state: APlicSourceState) extends Area 
   def driveAllowCtx(ctx: WhenBuilder): Unit
   def driveIepCtx(ctx: WhenBuilder): Unit
   def driveRectifiedCtx(ctx: WhenBuilder): Unit
-  def driveConfigUpdateCtx(ctx: WhenBuilder): Unit
+  def driveConfigUpdateCtx(ctx: WhenBuilder, nextMode: APlicSourceMode.C): Unit
   def supportModes(): Seq[APlicSourceMode.E]
 
   def asDirectRequest(idWidth: Int, targetHart: Int): APlicGenericRequest = {
@@ -219,7 +219,7 @@ abstract class APlicSource(sourceId: Int, state: APlicSourceState) extends Area 
       ip := False
     }
 
-    driveConfigUpdateCtx(ctx)
+    driveConfigUpdateCtx(ctx, mode)
   }
 
   def setConfig(payload: UInt): Unit = {
@@ -332,11 +332,11 @@ case class APlicFullSource(sourceId: Int, state: APlicSourceState) extends APlic
     }
   }
 
-  override def driveConfigUpdateCtx(ctx: WhenBuilder): Unit = {
-    ctx.when(List(EDGE1, LEVEL1).map(mode === _).orR) {
+  override def driveConfigUpdateCtx(ctx: WhenBuilder, nextMode: APlicSourceMode.C): Unit = {
+    ctx.when(List(EDGE1, LEVEL1).map(nextMode === _).orR) {
       ip := input
     }
-    ctx.when(List(EDGE0, LEVEL0).map(mode === _).orR) {
+    ctx.when(List(EDGE0, LEVEL0).map(nextMode === _).orR) {
       ip := ~input
     }
   }
@@ -370,8 +370,8 @@ case class APlicSourceActiveHigh(sourceId: Int, state: APlicSourceState) extends
     }
   }
 
-  override def driveConfigUpdateCtx(ctx: WhenBuilder): Unit = {
-    ctx.when(mode === LEVEL1) {
+  override def driveConfigUpdateCtx(ctx: WhenBuilder, nextMode: APlicSourceMode.C): Unit = {
+    ctx.when(nextMode === LEVEL1) {
       ip := input
     }
   }
@@ -405,8 +405,8 @@ case class APlicSourceActiveLow(sourceId: Int, state: APlicSourceState) extends 
     }
   }
 
-  override def driveConfigUpdateCtx(ctx: WhenBuilder): Unit = {
-    ctx.when(mode === LEVEL0) {
+  override def driveConfigUpdateCtx(ctx: WhenBuilder, nextMode: APlicSourceMode.C): Unit = {
+    ctx.when(nextMode === LEVEL0) {
       ip := ~input
     }
   }
@@ -436,7 +436,7 @@ case class APlicSourceActiveRising(sourceId: Int, state: APlicSourceState) exten
     }
   }
 
-  override def driveConfigUpdateCtx(ctx: WhenBuilder): Unit = {
+  override def driveConfigUpdateCtx(ctx: WhenBuilder, mode: APlicSourceMode.C): Unit = {
     ctx.when(mode === EDGE1) {
       ip := input
     }
@@ -467,8 +467,8 @@ case class APlicSourceActiveFalling(sourceId: Int, state: APlicSourceState) exte
     }
   }
 
-  override def driveConfigUpdateCtx(ctx: WhenBuilder): Unit = {
-    ctx.when(mode === EDGE0) {
+  override def driveConfigUpdateCtx(ctx: WhenBuilder, nextMode: APlicSourceMode.C): Unit = {
+    ctx.when(nextMode === EDGE0) {
       ip := ~input
     }
   }
@@ -493,5 +493,5 @@ case class APlicSourceActiveSpurious(sourceId: Int, state: APlicSourceState) ext
     }
   }
 
-  override def driveConfigUpdateCtx(ctx: WhenBuilder): Unit = {}
+  override def driveConfigUpdateCtx(ctx: WhenBuilder, nextMode: APlicSourceMode.C): Unit = {}
 }
