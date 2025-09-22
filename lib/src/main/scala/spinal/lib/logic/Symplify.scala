@@ -43,6 +43,9 @@ object Symplify {
 }
 
 object SymplifyBit {
+  var reportTime = false
+  var reportTimeAcc = 0.0
+
   // Return a new term with only one bit difference with 'term' and not included in falseTerms. above => 0 to 1 dif, else 1 to 0 diff
   def genImplicitDontCare(falseTerms: Seq[Masked], term: Masked, bits: Int, above: Boolean): Masked = {
     for (i <- 0 until bits; if term.care.testBit(i)) {
@@ -64,6 +67,7 @@ object SymplifyBit {
 
   // Return primes implicants for the trueTerms, falseTerms spec. Default value is don't care
   def getPrimeImplicantsByTrueAndFalse(trueTerms: Seq[Masked], falseTerms: Seq[Masked], inputWidth : Int): Seq[Masked] = {
+    val startAt = System.nanoTime()
     val primes = mutable.LinkedHashSet[Masked]()
     trueTerms.foreach(_.isPrime = true)
     falseTerms.foreach(_.isPrime = true)
@@ -115,6 +119,13 @@ object SymplifyBit {
     if(duplication != 0){
       PendingError(s"Duplicated primes : $duplication")
     }
+
+    val endAt = System.nanoTime()
+    val time = (endAt - startAt)*1e-9
+    reportTimeAcc += time
+    if(reportTime){
+      println(s"getPrimeImplicantsByTrueAndFalse $time")
+    }
     primes.toSeq
   }
 
@@ -134,6 +145,7 @@ object SymplifyBit {
   // You can insert don't care values by adding non-prime implicants in the trueTerms
   // Will simplify the trueTerms from the most constrained ones to the least constrained ones
   def getPrimeImplicantsByTrueAndDontCare(trueTerms: Seq[Masked],dontCareTerms: Seq[Masked], inputWidth : Int): Seq[Masked] = {
+    val startAt = System.nanoTime()
     val primes = mutable.LinkedHashSet[Masked]()
     trueTerms.foreach(_.isPrime = true)
     dontCareTerms.foreach(_.isPrime = false)
@@ -171,6 +183,14 @@ object SymplifyBit {
     }
     if(duplication != 0){
       PendingError(s"Duplicated primes : $duplication")
+    }
+
+
+    val endAt = System.nanoTime()
+    val time = (endAt - startAt)*1e-9
+    reportTimeAcc += time
+    if(reportTime){
+      println(s"getPrimeImplicantsByTrueAndDontCare $time")
     }
     primes.toSeq
   }
