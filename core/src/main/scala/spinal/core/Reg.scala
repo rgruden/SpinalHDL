@@ -20,6 +20,7 @@
 \*                                                                           */
 package spinal.core
 
+import spinal.core.internals.Expression
 import spinal.idslplugin.Location
 
 
@@ -88,4 +89,13 @@ object RegInit {
   def apply[T <: Data](init: T): T = Reg(init, init)
 
   def apply[T <: SpinalEnum](init : SpinalEnumElement[T]) : SpinalEnumCraft[T] = apply(init())
+}
+
+
+/**
+ * SimInit tag for register simulation initialization
+ * Sets simulation-only initial values via Verilog initial blocks
+ */
+case class SimInitTag(value: Expression) extends SpinalTag {
+  override def allowMultipleInstance = false
 }

@@ -267,12 +267,14 @@ object ResetCtrl{
 
     val solvedOutputPolarity = if(outputPolarity == null) clockDomain.config.resetActiveLevel else outputPolarity
     val falsePathAttrs = List(crossClockFalsePath(Some(input), destType = TimingEndpointType.RESET))
-    samplerCD(BufferCC(
+  val ret = samplerCD(BufferCC(
       input       = ((if(solvedOutputPolarity == HIGH) False else True) ^ inputSync).setCompositeName(input, "asyncAssertSyncDeassert", true),
       init        = if(solvedOutputPolarity == HIGH) True  else False,
       bufferDepth = bufferDepth,
       allBufAttributes = falsePathAttrs)
     )
+    ret.getDrivingReg().simInit(if(solvedOutputPolarity == HIGH) False else True)
+    ret
   }
 
   /**
