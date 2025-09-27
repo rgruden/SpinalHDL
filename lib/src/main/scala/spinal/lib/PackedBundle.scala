@@ -168,7 +168,13 @@ class PackedBundle extends Bundle {
       * @return Self
       */
     def packFrom(pos: Int): T = {
-      t.pack(pos + t.getBitsWidth - 1 downto pos)
+      // Need to consider if this is a PackedBundle or not
+      t match {
+        case pb: PackedBundle =>
+          t.pack(pos + pb.getPackedWidth - 1 downto pos)
+        case d: Data =>
+          t.pack(pos + d.getBitsWidth - 1 downto pos)
+      }
     }
 
     /** Packs data ending (MSB) at the bit position
@@ -176,7 +182,13 @@ class PackedBundle extends Bundle {
       * @return Self
       */
     def packTo(pos: Int): T = {
-      t.pack(pos downto pos - t.getBitsWidth + 1)
+      // Need to consider if this is a PackedBundle or not
+      t match {
+        case pb: PackedBundle =>
+          t.pack(pos downto pos - pb.getPackedWidth + 1)
+        case d: Data =>
+          t.pack(pos downto pos - d.getBitsWidth + 1)
+      }
     }
   }
 
