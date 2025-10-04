@@ -572,22 +572,22 @@ object CounterFreeRun {
   */
 object Counter {
 
-  /** Create a counter on `[start, end]` */ 
+  /** Create a counter on `[start, end]` */
   def apply(start: BigInt, end: BigInt) : Counter  = new Counter(start = start, end = end)
-  
+
   /** Create a counter on `[range.low, range.high]` */
   def apply(range : Range) : Counter = {
     require(range.step == 1)
     Counter(start = range.low, end = range.high)
   }
 
-  /** Create a counter on `[0, stateCount-1]` */ 
+  /** Create a counter on `[0, stateCount-1]` */
   def apply(stateCount: BigInt): Counter = new Counter(start = 0, end = stateCount-1)
 
-  /** Create a counter on `[0, 2^bitCount-1]` */ 
+  /** Create a counter on `[0, 2^bitCount-1]` */
   def apply(bitCount: BitCount): Counter = new Counter(start = 0, end = (BigInt(1)<<bitCount.value)-1)
 
-  /** Create a counter on `[start, end]` with `inc` signal as increment enable */ 
+  /** Create a counter on `[start, end]` with `inc` signal as increment enable */
   def apply(start: BigInt, end: BigInt, inc: Bool) : Counter  = {
     val counter = Counter(start, end)
     when(inc) {
@@ -596,17 +596,30 @@ object Counter {
     counter
   }
 
-  /** Create a counter on `[range.low, range.high]` with `inc` signal as increment enable */ 
+  /** Create a counter on `[range.low, range.high]` with `inc` signal as increment enable */
   def apply(range : Range, inc: Bool) : Counter  = {
     require(range.step == 1)
     Counter(start = range.low, end = range.high, inc = inc)
   }
-  
-  /** Create a counter on `[0, stateCount-1]` with `inc` signal as increment enable */ 
+
+  /** Create a counter on `[0, stateCount-1]` with `inc` signal as increment enable */
   def apply(stateCount: BigInt, inc: Bool): Counter = Counter(start = 0, end = stateCount-1, inc = inc)
 
-  /** Create a counter on `[0, 2^bitCount-1]` with `inc` signal as increment enable */ 
+  /** Create a counter on `[0, 2^bitCount-1]` with `inc` signal as increment enable */
   def apply(bitCount: BitCount, inc: Bool): Counter = Counter(start = 0, end = (BigInt(1)<<bitCount.value)-1, inc = inc)
+
+  /** Create a counter on `[0, Clocks for given Time]` */
+  def apply(time: TimeNumber): Counter = Counter(
+    stateCount = ((time.toBigDecimal * ClockDomain.current.frequency.getValue.toBigDecimal)
+          .setScale(0, BigDecimal.RoundingMode.UP)).toBigInt
+  )
+
+  /** Create a counter on `[0, Clocks for given Time]` with `inc` signal as increment enable */
+  def apply(time: TimeNumber, inc: Bool): Counter = Counter(
+    stateCount = ((time.toBigDecimal * ClockDomain.current.frequency.getValue.toBigDecimal)
+          .setScale(0, BigDecimal.RoundingMode.UP)).toBigInt,
+    inc = inc
+  )
 }
 
 // start and end inclusive, up counter
@@ -859,7 +872,7 @@ object AnalysisUtils{
 
   def seekNonCombDriversFromSelf(that : Any)(body : Any => Unit): Unit = that match {
     case s : Statement => s match {
-      case s : BaseType if s.isComb => {
+      case s : BaseType if s.isComb || s.isAnalog => {
         if(s.hasTag(classOf[ClockDomainTag])){
           body(s)
         } else {
@@ -902,6 +915,15 @@ object AnalysisUtils{
         body(o, cds.toList)
 //        val clocks = cds.map(_.clock).distinctLinked
 //        println(s"${o.getName()} clocked by ${clocks.map(_.getName()).mkString(",")}")
+      }
+      case io if io.isInOut => {
+        val iCds = io.getTags().collect{ case t : ClockDomainReportTag => t.clockDomain}
+        val oCds = mutable.LinkedHashSet[ClockDomain]()
+        seekNonCombDrivers(io){
+          case bt : BaseType if bt.isReg => oCds += bt.clockDomain
+          case _ => println("???")
+        }
+        body(io, iCds.toList ++ oCds.toList)
       }
     }
   }

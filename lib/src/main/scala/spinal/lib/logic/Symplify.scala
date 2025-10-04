@@ -5,6 +5,7 @@ import spinal.lib._
 import spinal.lib.eda.bench.{AlteraStdTargets, Bench, EfinixStdTargets, Rtl, XilinxStdTargets}
 import spinal.lib.eda.xilinx.VivadoFlow
 
+import java.util.concurrent.ConcurrentHashMap
 import scala.collection.mutable
 import scala.math.BigInt
 
@@ -43,6 +44,9 @@ object Symplify {
 }
 
 object SymplifyBit {
+  var reportTime = false
+  var reportTimeAcc = 0.0
+
   // Return a new term with only one bit difference with 'term' and not included in falseTerms. above => 0 to 1 dif, else 1 to 0 diff
   def genImplicitDontCare(falseTerms: Seq[Masked], term: Masked, bits: Int, above: Boolean): Masked = {
     for (i <- 0 until bits; if term.care.testBit(i)) {
@@ -62,8 +66,17 @@ object SymplifyBit {
     null
   }
 
+  private val getPrimeImplicantsByTrueAndFalseCache = new ConcurrentHashMap[(List[Masked], List[Masked], Int), Seq[Masked]]()
+
   // Return primes implicants for the trueTerms, falseTerms spec. Default value is don't care
   def getPrimeImplicantsByTrueAndFalse(trueTerms: Seq[Masked], falseTerms: Seq[Masked], inputWidth : Int): Seq[Masked] = {
+    val key = (trueTerms.toList, falseTerms.toList, inputWidth)
+    val key2 = (trueTerms.toList, falseTerms.toList, inputWidth)
+    if(getPrimeImplicantsByTrueAndFalseCache.containsKey(key)) {
+      return getPrimeImplicantsByTrueAndFalseCache.get(key)
+    }
+
+    val startAt = System.nanoTime()
     val primes = mutable.LinkedHashSet[Masked]()
     trueTerms.foreach(_.isPrime = true)
     falseTerms.foreach(_.isPrime = true)
@@ -115,7 +128,17 @@ object SymplifyBit {
     if(duplication != 0){
       PendingError(s"Duplicated primes : $duplication")
     }
-    primes.toSeq
+
+    val endAt = System.nanoTime()
+    val time = (endAt - startAt)*1e-9
+    reportTimeAcc += time
+    if(reportTime){
+      println(s"getPrimeImplicantsByTrueAndFalse $time")
+    }
+
+    val seq = primes.toSeq
+    getPrimeImplicantsByTrueAndFalseCache.put(key, seq)
+    seq
   }
 
   // Verify that the 'terms' doesn't violate the trueTerms ++ falseTerms spec
@@ -130,10 +153,19 @@ object SymplifyBit {
 
   def getPrimeImplicantsByTrue(trueTerms: Seq[Masked], inputWidth : Int) : Seq[Masked] = getPrimeImplicantsByTrueAndDontCare(trueTerms, Nil, inputWidth)
 
+
+  private val getPrimeImplicantsByTrueAndDontCareCache = new ConcurrentHashMap[(List[Masked], List[Masked], Int), Seq[Masked]]()
+
   // Return primes implicants for the trueTerms, default value is False.
   // You can insert don't care values by adding non-prime implicants in the trueTerms
   // Will simplify the trueTerms from the most constrained ones to the least constrained ones
   def getPrimeImplicantsByTrueAndDontCare(trueTerms: Seq[Masked],dontCareTerms: Seq[Masked], inputWidth : Int): Seq[Masked] = {
+    val key = (trueTerms.toList, dontCareTerms.toList, inputWidth)
+    if(getPrimeImplicantsByTrueAndDontCareCache.containsKey(key)) {
+      return getPrimeImplicantsByTrueAndDontCareCache.get(key)
+    }
+
+    val startAt = System.nanoTime()
     val primes = mutable.LinkedHashSet[Masked]()
     trueTerms.foreach(_.isPrime = true)
     dontCareTerms.foreach(_.isPrime = false)
@@ -172,7 +204,18 @@ object SymplifyBit {
     if(duplication != 0){
       PendingError(s"Duplicated primes : $duplication")
     }
-    primes.toSeq
+
+
+    val endAt = System.nanoTime()
+    val time = (endAt - startAt)*1e-9
+    reportTimeAcc += time
+    if(reportTime){
+      println(s"getPrimeImplicantsByTrueAndDontCare $time")
+    }
+
+    val seq = primes.toSeq
+    getPrimeImplicantsByTrueAndDontCareCache.put(key, seq)
+    seq
   }
 
   def main(args: Array[String]) {
