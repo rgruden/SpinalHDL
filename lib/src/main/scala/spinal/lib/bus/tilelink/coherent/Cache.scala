@@ -408,7 +408,7 @@ class Cache(val p : CacheParam) extends Component {
       val victim, primary, acquire, victimRead, victimWrite, cacheWrite = Reg(Bool())
       val flushBus = withFlushBus generate Reg(Bool())
 
-      val flags = ArrayBuffer[Bool](victim, acquire, primary, victimWrite, cacheWrite)
+      val flags = ArrayBuffer[Bool](victim, acquire, primary, victimRead, victimWrite, cacheWrite)
       if(withFlushBus) flags += flushBus
       fire setWhen(flags.norR)
     }
@@ -434,6 +434,18 @@ class Cache(val p : CacheParam) extends Component {
       val write = ram.writePort()
     }
     val fullUpA = slots.dropRight(p.generalSlotCountUpCOnly).map(_.valid).andR
+
+//    val debug = new Area{
+//      val timeout = B(slots.map(_.pending.timeout.state))
+//      val valid = B(slots.map(_.valid))
+//      val victim = B(slots.map(_.pending.victim))
+//      val primary = B(slots.map(_.pending.primary))
+//      val acquire = B(slots.map(_.pending.acquire))
+//      val victimRead = B(slots.map(_.pending.victimRead))
+//      val victimWrite = B(slots.map(_.pending.victimWrite))
+//      val cacheWrite = B(slots.map(_.pending.cacheWrite))
+//      val flushBus = withFlushBus generate B(slots.map(_.pending.flushBus))
+//    }
   }
 
   val fromFlushBus = withFlushBus generate new Area {
