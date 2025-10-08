@@ -1452,10 +1452,11 @@ class StringPimped(pimped : String){
     Vec(pimped.getBytes(Charset.forName(encoding)).map(b => B(b.toInt, 8 bit)))
   }
   def toBigInt = {
-    if(pimped.contains("0x"))
-      BigInt(pimped.replace("0x",""), 16)
+    val noUnder = pimped.replace("_", "")
+    if(noUnder.contains("0x"))
+      BigInt(noUnder.replace("0x",""), 16)
     else
-      BigInt(pimped, 10)
+      BigInt(noUnder, 10)
   }
 }
 
