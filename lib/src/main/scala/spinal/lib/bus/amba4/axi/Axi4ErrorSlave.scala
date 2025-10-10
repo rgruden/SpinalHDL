@@ -39,6 +39,7 @@ case class Axi4ReadOnlyErrorSlave(axiConfig: Axi4Config) extends Component{
   val io = new Bundle{
     val axi = slave(Axi4ReadOnly(axiConfig))
   }
+  io.axi.r.data.assignDontCare()
 
   val sendRsp       = RegInit(False)
   val id            = if(axiConfig.useId) Reg(UInt(axiConfig.idWidth bits)) else null
