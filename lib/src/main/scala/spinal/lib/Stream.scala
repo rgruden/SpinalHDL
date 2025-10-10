@@ -2805,7 +2805,7 @@ class StreamPacker[T <: Data](
 
 
 
-class StreamDelay[T <: Data](val payloadType : HardType[T], val delay: Int, val timestampWidth : Int = 16) extends Component{
+class StreamDelay[T <: Data](val payloadType : HardType[T], val delay: Int, val pendingMax : Option[Int] = Option.empty[Int], val timestampWidth : Int = 16) extends Component{
   val io = new Bundle{
     val push = slave Stream(payloadType())
     val pop = master Stream(payloadType())
@@ -2822,7 +2822,7 @@ class StreamDelay[T <: Data](val payloadType : HardType[T], val delay: Int, val 
   }
   val withFifo = (delay >= 2) generate {
     val time = CounterFreeRun(BigInt(1) << timestampWidth)
-    val fifo = StreamFifo(StreamDelayWord(), 1 << log2Up(delay), latency = Math.min(delay, 2))
+    val fifo = StreamFifo(StreamDelayWord(), pendingMax.getOrElse(1 << log2Up(delay)), latency = Math.min(delay, 2))
     fifo.io.push.arbitrationFrom(io.push)
     fifo.io.push.data := io.push.payload
     fifo.io.push.timestamp := time.value + delay

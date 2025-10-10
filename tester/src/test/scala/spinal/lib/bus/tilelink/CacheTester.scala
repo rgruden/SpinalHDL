@@ -66,7 +66,7 @@ class CacheTester extends AnyFunSuite{
         directory.parameter.cacheWays = 4
         directory.parameter.cacheBytes = 4096
         directory.parameter.allocateOnMiss = (op, src, addr, size, param) => addr(6)
-        directory.parameter.selfFlush = SelfFLush(0x10000, 0x10000+0x400, 2000)
+//        directory.parameter.selfFlush = SelfFLush(0x10000, 0x10000+0x400, 2000)
         directory.parameter.flushCompletionsCount = 4
         cp(directory.parameter)
         directory.up << m0.node
@@ -144,7 +144,7 @@ class CacheTester extends AnyFunSuite{
       val testers = (tb.masterSpecs, tb.mastersStuff).zipped.map((s, t) => new MasterTester(s, t.agent))
       //      val globalLock = Some(SimMutex()) //for test only
       val globalLock = Option.empty[SimMutex]
-      testers.foreach(_.startPerSource(10000, globalLock))
+      testers.foreach(_.startPerSource(100000, globalLock))
       testers.foreach(_.join())
       tb.waitCheckers()
       tb.assertCoverage()

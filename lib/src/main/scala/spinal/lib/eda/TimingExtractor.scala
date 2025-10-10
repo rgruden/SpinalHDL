@@ -65,13 +65,13 @@ class TimingExtractorSdc(path : File, marginFactor : Double) extends TimingExtra
 
   override def writeInputDelay(bt: BaseType): Unit = {
     bt.getTag(classOf[ClockDomainReportTag]) match {
-      case Some(tag) => o.println(s"set_input_delay -clock ${pathOf(tag.clockDomain.clock)} -max ??? ${pathOf(bt)}")
+      case Some(tag) => o.println(s"set_input_delay -clock ${pathOf(tag.clockDomain.clock)} -max $$INPUT_DELAY_DEFAULT ${pathOf(bt)}")
       case _ => println(s"no input delay for $bt")
     }
   }
   override def writeOutputDelay(bt: BaseType): Unit = {
     bt.getTag(classOf[ClockDomainReportTag]) match {
-      case Some(tag) => o.println(s"set_output_delay -clock ${pathOf(tag.clockDomain.clock)} -min ??? ${pathOf(bt)}")
+      case Some(tag) => o.println(s"set_output_delay -clock ${pathOf(tag.clockDomain.clock)} -min $$OUTPUT_DELAY_DEFAULT ${pathOf(bt)}")
       case _ => println(s"no output delay for $bt")
     }
   }
