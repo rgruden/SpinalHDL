@@ -162,15 +162,12 @@ case class TilelinkAPlicMsiSenderFiber(pendingSize: Int = 4, addressWidth: Int =
   }
 }
 
-case class TilelinkAPlicFiber(domainParam: APlicDomainParam) extends Area with InterruptCtrlFiber with APlicMsiProducerFiber {
+case class TilelinkAPlicFiber(domainParam: APlicDomainParam) extends Area with CascadedInterruptCtrlFiber with APlicMsiProducerFiber {
   val node = tilelink.fabric.Node.up()
   val core = Handle[TilelinkAPlic]()
 
   case class SourceSpec(node: InterruptNode, param: APlicSourceParam)
   case class TargetSpec(node: InterruptNode, id: Int)
-  case class APlicSlaveBundle(childInfo: APlicChildInfo) extends Area {
-    val flags = childInfo.sourceIds.map(_ => InterruptNode.master())
-  }
 
   val sources = ArrayBuffer[SourceSpec]()
   val targets = ArrayBuffer[TargetSpec]()
@@ -194,16 +191,11 @@ case class TilelinkAPlicFiber(domainParam: APlicDomainParam) extends Area with I
     spec.node
   }
 
-  override def createInterruptSlave(id: Int, mode: InterruptMode) : InterruptNode = {
+  override def createInternalInterruptSlave(id: Int, mode: InterruptMode) : InterruptNode = {
     val param = APlicSourceParam(id, mode)
     val spec = node.clockDomain on SourceSpec(InterruptNode.slave(), param)
     sources += spec
     spec.node
-  }
-
-  val childSources = ArrayBuffer[APlicSlaveBundle]()
-  def createInterruptDelegation(childInfo: APlicChildInfo) = {
-    childSources.addRet(APlicSlaveBundle(childInfo))
   }
 
   val thread = Fiber build new Area {
@@ -212,7 +204,9 @@ case class TilelinkAPlicFiber(domainParam: APlicDomainParam) extends Area with I
     node.m2s.supported.load(TilelinkAPlic.getTilelinkSlaveSupport(node.m2s.proposed, TilelinkAPlic.addressWidth(targets.map(_.id).max + 1)))
     node.s2m.none()
 
-    val aplic = TilelinkAPlic(sources.map(_.param).toSeq, targets.map(_.id).toSeq, childSources.map(_.childInfo).toSeq, domainParam, node.bus.p)
+    val childSources = childs.zipWithIndex.map{case (child, i) => APlicChildInfo(i, child.sourceIds)}
+
+    val aplic = TilelinkAPlic(sources.map(_.param).toSeq, targets.map(_.id).toSeq, childSources.toSeq, domainParam, node.bus.p)
 
     core.load(aplic)
 
@@ -234,8 +228,10 @@ case class TilelinkAPlicFiber(domainParam: APlicDomainParam) extends Area with I
       core.io.smsiaddrcfg := smsiaddrcfg
     }
 
-    for ((childSource, ioSlaveSource) <- childSources.zip(core.io.childSources)) {
-      Vec(childSource.flags.map(_.flag)) := ioSlaveSource.asBools
+    for((child, ioSlaveSource) <- childs.zip(core.io.childSources)) {
+      child.interruptNodes.zipWithIndex.map{case (node, i) =>
+        node.flag := ioSlaveSource(i)
+      }
     }
   }
 }

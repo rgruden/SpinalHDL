@@ -5,6 +5,7 @@ import spinal.core.fiber._
 import spinal.lib._
 
 import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
 sealed trait InterruptMode
 object EDGE_RISING extends InterruptMode
@@ -43,4 +44,41 @@ trait InterruptCtrlFiber extends Nameable{
 
   def retain() = lock.retain()
   def release() = lock.release()
+}
+
+case class ChildInterruptCtrl(intc: InterruptCtrlFiber, filter: (Int, InterruptMode) => Boolean) extends Area {
+  var sources = ArrayBuffer[(Int, InterruptNode)]()
+
+  def sourceIds = sources.map(_._1).toSeq
+  def interruptNodes = sources.map(_._2).toSeq
+
+  def mapDeletagedInterrupt(id: Int, mode: InterruptMode): Unit = {
+    if (filter(id, mode)) {
+      val node = InterruptNode.master()
+      intc.mapUpInterrupt(id, node, mode)
+      sources.addRet((id, node))
+    }
+  }
+}
+
+trait CascadedInterruptCtrlFiber extends InterruptCtrlFiber{
+  var childs = ArrayBuffer[ChildInterruptCtrl]()
+
+  def addChildCtrl(intc: InterruptCtrlFiber, filter: (Int, InterruptMode) => Boolean = (_, _) => true): ChildInterruptCtrl = {
+    childs.addRet(ChildInterruptCtrl(intc, filter))
+  }
+
+  /**
+    * This function is the same as createInterruptSlave, but only create interrupt
+    * slave for current interrupt controller
+    */
+  def createInternalInterruptSlave(id: Int, mode: InterruptMode): InterruptNode
+
+  override def createInterruptSlave(id: Int, mode: InterruptMode): InterruptNode = {
+    for (child <- childs) {
+      child.mapDeletagedInterrupt(id, mode)
+    }
+
+    createInternalInterruptSlave(id, mode)
+  }
 }
