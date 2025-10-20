@@ -267,7 +267,7 @@ object APlicSource {
 case class APlicFullSource(sourceId: Int, state: APlicSourceState) extends APlicSource(sourceId, state) {
   import APlicSourceMode._
 
-  val trigger = input.edges()
+  lazy val trigger = input.edges()
 
   override def supportModes(): Seq[E] = Seq(INACTIVE, EDGE0, EDGE1, LEVEL0, LEVEL1, DETACHED)
 
@@ -423,7 +423,7 @@ case class APlicSourceActiveLow(sourceId: Int, state: APlicSourceState) extends 
 case class APlicSourceActiveRising(sourceId: Int, state: APlicSourceState) extends APlicSource(sourceId, state) {
   import APlicSourceMode._
 
-  val trigger = input.rise()
+  lazy val trigger = input.rise()
 
   override def supportModes(): Seq[E] = Seq(INACTIVE, EDGE1)
 
@@ -456,7 +456,7 @@ case class APlicSourceActiveRising(sourceId: Int, state: APlicSourceState) exten
 case class APlicSourceActiveFalling(sourceId: Int, state: APlicSourceState) extends APlicSource(sourceId, state) {
   import APlicSourceMode._
 
-  val trigger = input.fall()
+  lazy val trigger = input.fall()
 
   override def supportModes(): Seq[E] = Seq(INACTIVE, EDGE0)
 
