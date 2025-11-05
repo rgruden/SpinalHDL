@@ -1,0 +1,28 @@
+name: Sync tags from upstream
+
+on:
+  workflow_dispatch:      # run it manually from the Actions tab
+  schedule:
+    - cron: "0 6 * * *"   # optional: daily at 06:00 UTC
+
+permissions:
+  contents: write         # needed so GITHUB_TOKEN can push tags
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout this fork
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Add upstream and fetch its tags
+        env:
+          UPSTREAM_URL: https://github.com/SpinalHDL/SpinalHDL.git
+        run: |
+          git remote add upstream "$UPSTREAM_URL"
+          git fetch upstream --tags --prune
+
+      - name: Push tags to this fork (origin)
+        run: git push origin --tags
