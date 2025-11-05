@@ -10,7 +10,7 @@ class TupleBundleBase extends Bundle {
     super.valCallbackRec(ref, name.tail)
   }
 
-  @deprecated("misspelled method will be removed", ???)
+  @deprecated("misspelled method will be removed", "???")
   def asRevertedBits: Bits = asReversedBits
   def asReversedBits: Bits = {
     var ret: Bits = null
