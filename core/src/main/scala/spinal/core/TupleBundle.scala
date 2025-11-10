@@ -16,7 +16,7 @@ class TupleBundleBase extends Bundle {
     var ret: Bits = null
     for ((_, e) <- elements) {
       if (ret == null.asInstanceOf[Object]) ret = e.asBits
-      else ret = e.asBits ## ret
+      else ret = ret ## e.asBits
     }
     if (ret.asInstanceOf[Object] == null) ret = Bits(0 bits)
     ret
