@@ -12,15 +12,6 @@ class TupleBundleBase extends Bundle {
 
   @deprecated("misspelled method will be removed", "???")
   def asRevertedBits: Bits = asReversedBits
-  def asReversedBits: Bits = {
-    var ret: Bits = null
-    for ((_, e) <- elements) {
-      if (ret == null.asInstanceOf[Object]) ret = e.asBits
-      else ret = ret ## e.asBits
-    }
-    if (ret.asInstanceOf[Object] == null) ret = Bits(0 bits)
-    ret
-  }
 
   override def elements: ArrayBuffer[(String, Data)] = elementsCache.reverse
 }
