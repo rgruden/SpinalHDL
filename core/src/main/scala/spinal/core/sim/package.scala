@@ -554,6 +554,18 @@ package object sim {
     def toBigInt: BigInt = getBigInt(bt)
     def toBytes: Array[Byte] = SimEquivBitVectorBytesPimper(bt).getSim
     def toBooleans : Array[Boolean] = SimEquivBitVectorBooleansPimper(bt).getSim
+
+    /** Set all bits of the BitVector to 1 during simulation
+      *
+      * @see [[https://spinalhdl.github.io/SpinalDoc-RTD/master/SpinalHDL/Simulation/signal.html#read-and-write-signals Simulation documentation]]
+      */
+    def simSetAll(): Unit = {
+      val width = bt.getBitsWidth
+      if (width <= 0) return
+
+      val allOnesValue = (BigInt(1) << width) - 1
+      bt #= allOnesValue
+    }
   }
 
   object SimUnionElementPimper {
