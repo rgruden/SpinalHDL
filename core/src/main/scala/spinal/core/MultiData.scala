@@ -55,6 +55,20 @@ abstract class MultiData extends Data {
     ret
   }
 
+  /** Concatenate the bits of the elements in reverse order.
+    *
+    * This does not recurse, so elements which are composite will appear in forward order.
+    */
+  def asReversedBits: Bits = {
+    var ret: Bits = null
+    for ((_, e) <- elements) {
+      if (ret == null.asInstanceOf[Object]) ret = e.asBits
+      else ret = ret ## e.asBits
+    }
+    if (ret.asInstanceOf[Object] == null) ret = Bits(0 bits)
+    ret
+  }
+
   override def getBitsWidth: Int = {
     var accumulateWidth = 0
     for ((_, e) <- elements) {
