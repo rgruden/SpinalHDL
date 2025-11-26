@@ -805,10 +805,25 @@ class Cache(val p : CacheParam) extends Component {
 
       val upAHold = False
 
+      val loopbackPop = loopback.fifo.io.pop.halfPipe()
+
       val cmds = ArrayBuffer[Stream[CtrlCmd]]()
       cmds += prober.schedule.toCtrl.pipelined(m2s = true, s2m = true)
-      cmds += loopback.fifo.io.pop.halfPipe()
       cmds += fromUpA.toCtrl.continueWhen(loopback.allowUpA && !upAHold)
+      cmds += loopbackPop
+
+      val onLoopback = new Area{
+        val regulator = Reg(UInt(2 bits)) init(0)
+        when(loopbackPop.valid){
+          when(fromUpA.toCtrl.fire) {
+            regulator := regulator + 1
+          }
+          when(loopbackPop.ready) {
+            regulator := 0
+          }
+          upAHold setWhen(regulator.andR)
+        }
+      }
 
       val onFlushBus = withFlushBus generate new Area{
         val regulator = Reg(UInt(2 bits)) init(0)

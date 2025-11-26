@@ -112,7 +112,7 @@ class TilelinkTester[T <: Component](cGen: => T, simConfig : SpinalSimConfig = S
   }
 }
 
-class TilelinkTestbenchBase[T <: Component](nodes: Seq[Node], orderings: Seq[OrderingTag], val dut : T)(implicit val idAllocator: IdAllocator, idCallback: IdCallback) extends Area {
+class TilelinkTestbenchBase[T <: Component](nodes: Seq[Node], orderings: Seq[OrderingTag], val dut : T)(implicit val idAllocator: IdAllocator, val idCallback: IdCallback) extends Area {
   val nodeToModel = mutable.LinkedHashMap[Node, SparseMemory]()
   val slaveNodes = nodes.filter(_.bus.isMasterInterface)
   val masterNodes = nodes.filter(_.bus.isSlaveInterface)
