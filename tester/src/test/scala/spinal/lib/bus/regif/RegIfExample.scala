@@ -194,7 +194,7 @@ class RegIfExample extends Component {
 
   def part0(addr: BigInt, tname: String = "") = new Area {
     busif.newBlockTag(tname)("RAM")
-    val RAM2 = busif.newRAMAt(addr, 16 Byte, doc = "Area ram test")
+    val RAM2 = busif.newRAMAt(addr, 64 Byte, doc = "Area ram test")
     RAM2.field(2, "doc ...")("mem_fd0")
     RAM2.field(8, "doc ...")("mem_fd1")
     RAM2.fieldAt(16, 2, "doc ...")("mem_fd2")
@@ -223,7 +223,7 @@ class RegIfExample extends Component {
   //  val x1 = part0(busif.getRegPtr())
   val ptr = busif.getRegPtr()
   for (i <- 0 to 6) {
-    val t = part0(ptr + i * 12 * 4,  s"bran${i}ch")
+    val t = part0(ptr + i * 32 * 4,  s"bran${i}ch")
     t.bus.setName(s"bus_ram${i}").asMaster()
     t.param0.asOutput()
     t.param1.asOutput()

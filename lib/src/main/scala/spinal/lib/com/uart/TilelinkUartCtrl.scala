@@ -13,7 +13,7 @@ object TilelinkUartCtrl{
     allowBurst = false,
     proposed
   )
-  def addressWidth = 6
+  def addressWidth = 8
 }
 
 case class TilelinkUartCtrl(config : UartCtrlMemoryMappedConfig, tilelinkParameter: BusParameter) extends Component{

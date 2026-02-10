@@ -1,4 +1,3 @@
-/** @todo: change <> with the corrispective >> and <<*/
 package spinal.lib.bus.wishbone
 
 import spinal.core._
@@ -7,7 +6,7 @@ import spinal.lib.bus.misc._
 import scala.collection.Seq
 
 /** Factory for [[spinal.lib.bus.wishbone.WishboneDecoder]] instances. */
-object WishboneDecoder{
+object WishboneDecoder {
   /** Create a istance of a wishbone decoder/multiplexer
   * @param config it will use for configuring all the input/output wishbone port
   * @param decodings it will use for configuring the partial address decoder
@@ -23,8 +22,8 @@ object WishboneDecoder{
   def apply(master: Wishbone, slaves: Seq[(Wishbone, AddressMapping)]): WishboneDecoder = {
     val decoder = new WishboneDecoder(master.config, slaves.map(_._2))
     decoder.io.input <> master
-    (slaves.map(_._1), decoder.io.outputs).zipped.map(_ <> _)
-    decoder.setPartialName(master,"decoder")
+    (slaves.map(_._1), decoder.io.outputs).zipped.map(_ << _)
+    decoder.setPartialName(master, "decoder")
   }
 }
 
@@ -35,7 +34,7 @@ object WishboneDecoder{
 class WishboneDecoder(config : WishboneConfig, decodings : Seq[AddressMapping]) extends Component {
   val io = new Bundle {
     val input = slave(Wishbone(config))
-    val outputs = Vec(master(Wishbone(config)),decodings.size)
+    val outputs = Vec(master(Wishbone(config)), decodings.size)
   }
 
   //permanently drive some slave iunput signal to save on logic usage

@@ -219,6 +219,8 @@ case class SpinalConfig(mode                           : SpinalMode = null,
                         var withTimescale              : Boolean = true,
                         var printFilelist              : Boolean = true,
                         var emitFullComponentBindings  : Boolean = true,
+                        var reportIncludeSourceLocation: Boolean = false,
+                        var reportSourceLocationFormat : String = SpinalConfig.defaultReportSourceLocationFormat,
                         var svInterface                : Boolean = false
 ){
   def generate       [T <: Component](gen: => T): SpinalReport[T] = Spinal(this)(gen)
@@ -325,6 +327,8 @@ object SpinalConfig{
   }
 
   var defaultTargetDirectory: String = System.getenv().getOrDefault("SPINAL_TARGET_DIR", ".")
+  var defaultReportSourceLocationFormat: String =
+    System.getenv().getOrDefault("SPINAL_REPORT_SOURCE_LOCATION_FORMAT", "$SEVERITY($FILE:$LINE) ")
 }
 
 

@@ -551,7 +551,7 @@ class SwitchStatement(var value: Expression) extends TreeStatement{
       val occupancy = new Array[Boolean](size.toInt)
 
       def allocate(id_ : BigInt): Boolean ={
-        val id = id_.toInt
+        val id = if (id_ < 0) (size + id_).toInt else id_.toInt
 
         if(id_ >= size){
           println("???")

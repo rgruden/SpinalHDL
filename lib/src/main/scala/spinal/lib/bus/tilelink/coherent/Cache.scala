@@ -1806,7 +1806,7 @@ class Cache(val p : CacheParam) extends Component {
       toUpD.source  := CTX.sourceId
       toUpD.sink    := CMD.source.resized
       toUpD.size    := CTX.size
-      toUpD.denied  := CMD.denied
+      toUpD.denied  := False
       toUpD.data    := CMD.data
       toUpD.corrupt := CMD.corrupt
 

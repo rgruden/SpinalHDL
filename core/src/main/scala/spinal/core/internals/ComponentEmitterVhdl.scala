@@ -745,7 +745,15 @@ class ComponentEmitterVhdl(
             if (!spinalConfig.formalAsserts) {
               val cond = emitExpression(assertStatement.cond)
 
-              val message = assertStatement.message
+              val messageInput =
+                if (assertStatement.hasTag(reportIncludeSourceLocation)) {
+                  val format = ReportFormatting.resolveFormat(assertStatement, spinalConfig)
+                  ReportFormatting.renderPrefix(format, assertStatement.loc, assertStatement.severity) +: assertStatement.message
+                } else {
+                  assertStatement.message
+                }
+
+              val message = messageInput
                 .map {
                   case m: String =>
                     "\"" +
@@ -770,12 +778,7 @@ class ComponentEmitterVhdl(
                 }
                 .mkString(" & ")
   
-              val severity = "severity " +  (assertStatement.severity match{
-                case `NOTE`     => "NOTE"
-                case `WARNING`  => "WARNING"
-                case `ERROR`    => "ERROR"
-                case `FAILURE`  => "FAILURE"
-              })
+              val severity = "severity " + ReportFormatting.severityLabel(assertStatement.severity)
               if (message.length > 0) {
                 b ++= s"""${tab}assert $cond = '1' report ($message) $severity;\n"""
               } else {

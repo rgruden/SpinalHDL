@@ -43,6 +43,12 @@ object FAILURE  extends AssertNodeSeverity
 
 object REPORT_TIME
 
+object ReportSourceLocation {
+  def prefix(format: String, loc: Location, severity: AssertNodeSeverity): String = {
+    spinal.core.internals.ReportFormatting.renderPrefix(format, loc, severity)
+  }
+}
+
 /** Min max base function */
 trait MinMaxProvider {
   def minValue: BigInt
@@ -843,6 +849,10 @@ object unusedTag                     extends SpinalTag
 object noCombinatorialLoopCheck      extends SpinalTag
 object noLatchCheck                  extends SpinalTag
 object noBackendCombMerge            extends SpinalTag
+object reportIncludeSourceLocation   extends SpinalTag{ override def allowMultipleInstance = false }
+case class reportSourceLocationFormatTag(format: String) extends SpinalTag{
+  override def allowMultipleInstance = false
+}
 
 /** Tag for clock crossing signals
   * @see [[https://spinalhdl.github.io/SpinalDoc-RTD/master/SpinalHDL/Structuring/clock_domain.html#clock-domain-crossing Clock domain crossing documentation]]

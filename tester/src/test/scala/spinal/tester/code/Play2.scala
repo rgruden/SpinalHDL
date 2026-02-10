@@ -1935,7 +1935,7 @@ object PlayNameableIssue2{
   }
 
   def main(args: Array[String]) {
-    SpinalVhdl(new StreamArbiter(Bits(8 bits),3)(StreamArbiter.Arbitration.lowerFirst,StreamArbiter.Lock.transactionLock))
+    SpinalVhdl(new StreamArbiter(Bits(8 bits), 3, StreamArbiter.LowerFirst, StreamArbiter.TransactionLock))
   }
 }
 object PlayNameableIssue3{

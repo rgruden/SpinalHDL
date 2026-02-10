@@ -4,7 +4,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import spinal.core.sim._
 import spinal.core._
 import spinal.core.fiber.{Fiber, hardFork}
-import spinal.lib.bus.misc.{AddressMapping, InterleavedMapping, OffsetTransformer, OrMapping, SizeMapping, SizeMappingInterleaved}
+import spinal.lib.bus.misc.{AddressMapping, AllMapping, InterleavedMapping, OffsetTransformer, OrMapping, SizeMapping, SizeMappingInterleaved}
 import spinal.lib.bus.tilelink
 import spinal.lib.bus.tilelink._
 import spinal.lib.bus.tilelink.sim._
@@ -396,6 +396,79 @@ class InterconnectTester extends AnyFunSuite{
       val s1, s2 = simpleSlave(8)
       s1.node at 0x200 of i1.down
       s2.node at 0x200 of i2.down
+
+      Fiber build {
+        val probed = MemoryConnection.getMemoryTransfers(m0.node)
+        println(probed)
+      }
+    })
+  }
+
+  test("interleavingBridge2"){
+    testInterconnectAll(new Component{
+      val m0 = simpleMaster(readWrite)
+
+      val i1 = Interleaver(0x10, 4, 1)
+      i1.up << m0.node
+
+      val i2 = Interleaver(0x10, 4, 2)
+      i2.up << m0.node
+
+      val n = Node()
+      n << i1.down
+      n << i2.down
+
+      val s1, s2 = simpleSlave(8)
+      s1.node at 0x200 of n
+      s2.node at 0x800 of n
+
+      Fiber build {
+        val probed = MemoryConnection.getMemoryTransfers(m0.node)
+        println(probed)
+      }
+    })
+  }
+  test("interleavingBridge2b"){
+    testInterconnectAll(new Component{
+      val m0 = simpleMaster(readWrite)
+
+      val n1, n2 = Node()
+      n1 at(InterleavedMapping(SizeMapping(0, 0x1000), 0x10, 4, 0)) of m0.node
+      n2 at(InterleavedMapping(SizeMapping(0, 0x1000), 0x10, 4, 1)) of m0.node
+
+      val n = Node()
+      n << n1
+      n << n2
+
+      val s1, s2 = simpleSlave(8)
+      s1.node at 0x200 of n
+      s2.node at 0x800 of n
+
+      Fiber build {
+        val probed = MemoryConnection.getMemoryTransfers(m0.node)
+        println(probed)
+      }
+    })
+  }
+
+
+  test("interleavingBridge3"){
+    testInterconnectAll(new Component{
+      val m0 = simpleMaster(all)
+
+      val hub1 = new HubFiber()
+      val hub2 = new HubFiber()
+
+      hub1.up at(InterleavedMapping(SizeMapping(0, 0x10000), 0x10, 4, 0)) of m0.node
+      hub2.up at(InterleavedMapping(SizeMapping(0, 0x10000), 0x10, 4, 1)) of m0.node
+
+      val n = Node()
+      n << hub1.down
+      n << hub2.down
+
+      val s1, s2 = simpleSlave(8)
+      s1.node at 0x200 of n
+      s2.node at 0x4800 of n
 
       Fiber build {
         val probed = MemoryConnection.getMemoryTransfers(m0.node)

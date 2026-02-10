@@ -139,7 +139,7 @@ class MyToplevel8() extends Component {
     val tmp = Bool() // Automaticaly tmp.setName("logic1_tmp")
   }
   def func1() = {
-    val tmp = Bool() //Unamed signal
+    val tmp = Bool() //Unnamed signal
   }
   def func2() = new Area {
     val tmp = Bool() //Automatic a.setCompositeName(this, "tmp")

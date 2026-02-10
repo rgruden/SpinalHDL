@@ -38,7 +38,7 @@ case class Interleaver(blockSize : Int, ratio : Int, sel : Int) extends Area{
     down.m2s.parameters load up.m2s.parameters.copy(addressWidth = up.m2s.parameters.addressWidth-patternBits)
     up.s2m.from(down.s2m)
 
-    assert(!down.bus.p.withBCE)
+//    assert(!down.bus.p.withBCE)
     down.bus << up.bus
     down.bus.a.address.removeAssignments() := transformer(up.bus.a.address)
   }

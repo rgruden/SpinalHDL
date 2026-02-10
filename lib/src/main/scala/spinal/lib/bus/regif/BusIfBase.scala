@@ -60,6 +60,79 @@ trait BusIfBase extends Area{
 
   def mwdata(sec: Range): Bits = if(withStrb) writeData(sec) & wmask(sec) else writeData(sec)
 
+  /**
+   * Gap-aware run-length encoding algorithm (Enhanced: Added block size consistency check)
+   * @param blocks Input list of blocks, each block is a consecutive list of Reg
+   * @param tolerance Tolerance span L, intervals exceeding this tolerance will break continuity
+   * @return List of triples (first block, consecutive block count, interval)
+   */
+  def groupConsecutiveBlocks(blocks: List[List[RegSlice]]): List[(List[RegSlice], Int, Int)] = {
+    if (blocks.isEmpty) return Nil
+    if (blocks.size == 1) return List((blocks.head, 1, (blocks.head.last.nextAddr - blocks.head.head.addr).toInt))
+    val gaps = blocks
+      .sliding(2)
+      .collect { case List(a, b) => (b.last.nextAddr - a.head.addr).toInt }
+      .toList
+    val freqGap = gaps.groupBy(identity).map(_._2).toList.sortBy(-_.size).head.head
+    val L = (1 << log2Up(freqGap/bw)) * bw * 2  //Tolerance is 2 * gap
+    grupConsecutiveBlocks(blocks, L)
+  }
+
+  def grupConsecutiveBlocks(blocks: List[List[RegSlice]], tolerance: Int): List[(List[RegSlice], Int, Int)] = {
+    if (blocks.isEmpty) return Nil
+    // Get the starting address (value of the first Reg) and size of each block
+    val starts = blocks.map(block => block.head.addr)
+    val sizes = blocks.map(t => (t.last.nextAddr - t.head.addr).toInt)
+
+    var result = List.empty[(List[RegSlice], Int, Int)]
+    var i = 0
+
+    while (i < blocks.length) {
+      val firstBlock = blocks(i)
+      val firstSize = sizes(i)
+      var currentCount = 1
+      var currentGap: Option[Int] = None
+      var j = i
+
+      // Try to extend the current group
+      while (j < blocks.length - 1) {
+        val gapVal = (starts(j + 1) - starts(j)).toInt
+        val nextSize = sizes(j + 1)
+
+        // Check continuity conditions: interval within tolerance and same block size
+        if (gapVal <= tolerance && firstSize == nextSize) {
+          if (currentCount == 1) {
+            // Only one block in current group, can try to establish new group
+            currentGap = Some(gapVal)
+            currentCount += 1
+          } else {
+            // Multiple blocks already in current group, check if interval is consistent
+            if (gapVal == currentGap.get) {
+              currentCount += 1  // Consistent interval, continue expanding group
+            } else {
+              // Interval inconsistent, end current group
+              j = blocks.length // Break out of loop
+            }
+          }
+        } else {
+          // Interval exceeds tolerance or different block size, end current group
+          j = blocks.length // Break out of loop
+        }
+        j += 1
+      }
+
+      // Determine output interval: use inter-block interval for multi-block groups,
+      // use block size for single-block groups
+      val outputGap = if (currentCount > 1) currentGap.get else firstSize
+      result = result :+ (firstBlock, currentCount, outputGap)
+
+      // Move to next group
+      i += currentCount
+    }
+
+    result
+  }
+
   def initStrbMasks() = {
     if (withStrb) {
       (0 until strbWidth).foreach { i =>

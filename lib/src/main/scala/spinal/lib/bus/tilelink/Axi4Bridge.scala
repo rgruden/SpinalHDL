@@ -6,7 +6,7 @@ import spinal.lib.bus.amba4.axi._
 import spinal.lib.bus.misc.SizeMapping
 
 object Axi4Bridge{
-  def getAxi4Config(p : NodeParameters, withAxi3 : Boolean): Axi4Config ={
+  def getAxi4Config(p : NodeParameters, withAxi3 : Boolean, forceAxi4Len : Boolean): Axi4Config ={
     assert(!p.withBCE)
     assert(p.m.emits.isOnlyGetPut())
     Axi4Config(
@@ -19,7 +19,8 @@ object Axi4Bridge{
       useProt      = false,
       useRegion    = false,
       useAllStrb   = true,
-      withAxi3     = withAxi3
+      withAxi3     = withAxi3,
+      forceAxi4Len = forceAxi4Len
     )
   }
 
@@ -28,8 +29,8 @@ object Axi4Bridge{
   )
 }
 
-class Axi4Bridge(p : NodeParameters, withAxi3 : Boolean = false) extends Component{
-  val axiConfig = Axi4Bridge.getAxi4Config(p, withAxi3)
+class Axi4Bridge(p : NodeParameters, withAxi3 : Boolean = false, forceAxi4Len : Boolean = false) extends Component{
+  val axiConfig = Axi4Bridge.getAxi4Config(p, withAxi3, forceAxi4Len)
   val io = new Bundle{
     val up = slave port Bus(p)
     val down = master port Axi4(axiConfig)

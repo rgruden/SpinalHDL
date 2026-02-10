@@ -765,7 +765,16 @@ class ComponentEmitterVerilog(
           case assertStatement: AssertStatement => {
             val cond = emitExpression(assertStatement.cond)
 
-            val frontString = (for (m <- assertStatement.message) yield m match {
+            val includeLocation = assertStatement.hasTag(reportIncludeSourceLocation)
+            val locationPrefix = if (includeLocation) {
+              val format = ReportFormatting.resolveFormat(assertStatement, spinalConfig)
+              ReportFormatting.renderPrefix(format, assertStatement.loc, assertStatement.severity)
+            } else {
+              ""
+            }
+            val messageInput = assertStatement.message
+
+            val frontString = (for (m <- messageInput) yield m match {
               case m: String => m
               case m: SpinalEnumCraft[_] => "%s"
               case m: Expression => "%x"
@@ -773,7 +782,7 @@ class ComponentEmitterVerilog(
               case x => SpinalError(s"""L\"\" can't manage the parameter '${x}' type. Located at :\n${statement.getScalaLocationLong}""")
             }).mkString.replace("\n", "\\n")
 
-            val backString = (for (m <- assertStatement.message if !m.isInstanceOf[String]) yield m match {
+            val backString = (for (m <- messageInput if !m.isInstanceOf[String]) yield m match {
               case m: SpinalEnumCraft[_] => ", " + emitExpression(m) + "_string"
               case m: Expression => ", " + emitExpression(m)
               case `REPORT_TIME` => ", $time"
@@ -786,12 +795,7 @@ class ComponentEmitterVerilog(
             }
 
             if (!systemVerilog) {
-              val severity = assertStatement.severity match {
-                case `NOTE` => "NOTE"
-                case `WARNING` => "WARNING"
-                case `ERROR` => "ERROR"
-                case `FAILURE` => "FAILURE"
-              }
+              val severity = ReportFormatting.severityLabel(assertStatement.severity)
 
               b ++= s"${tab}`ifndef SYNTHESIS\n"
               b ++= s"${tab}  `ifdef FORMAL\n"
@@ -801,7 +805,8 @@ class ComponentEmitterVerilog(
               /* Emulate them using $display */
               val zeroTimeCond = if (spinalConfig.noAssertAtTimeZero) " && $realtime != 0" else ""
               b ++= s"${tab}    if(!${cond}${zeroTimeCond}) begin\n"
-              b ++= s"""${tab}      $$display("$severity $frontString"$backString); // ${assertStatement.loc.file}.scala:L${assertStatement.loc.line}\n"""
+              val frontStringWithPrefix = if (includeLocation) s"$locationPrefix$frontString" else s"$severity $frontString"
+              b ++= s"""${tab}      $$display("$frontStringWithPrefix"$backString); // ${assertStatement.loc.file}.scala:L${assertStatement.loc.line}\n"""
               if (assertStatement.severity == `FAILURE`) b ++= tab + "      $finish;\n"
               b ++= s"${tab}    end\n"
               b ++= s"${tab}  `endif\n"
@@ -816,7 +821,8 @@ class ComponentEmitterVerilog(
               if (assertStatement.kind == AssertStatementKind.ASSERT && !spinalConfig.formalAsserts) {
                 val zeroTimeCond = if (spinalConfig.noAssertAtTimeZero) " || $realtime == 0" else ""
                 b ++= s"${tab}$keyword(${cond}${zeroTimeCond}) else begin\n"
-                b ++= s"""${tab}  $severity("$frontString"$backString); // ${assertStatement.loc.file}.scala:L${assertStatement.loc.line}\n"""
+                val frontStringWithPrefix = if (includeLocation) s"$locationPrefix$frontString" else frontString
+                b ++= s"""${tab}  $severity("$frontStringWithPrefix"$backString); // ${assertStatement.loc.file}.scala:L${assertStatement.loc.line}\n"""
                 if (assertStatement.severity == `FAILURE`) b ++= tab + "  $finish;\n"
                 b ++= s"${tab}end\n"
               } else {

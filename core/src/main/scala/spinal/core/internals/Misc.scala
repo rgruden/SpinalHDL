@@ -269,12 +269,12 @@ object GraphUtils{
     root.children.foreach(walkAllComponents(_, func))
   }
   def countNames(topLevel : Component) ={
-    var named, unamed = 0
+    var named, unnamed = 0
     GraphUtils.walkAllComponents(topLevel, c => c.dslBody.walkStatements{
-      case s : Nameable => if(s.getName().contains("zz"))  unamed += 1 else named += 1
+      case s : Nameable => if(s.getName().contains("zz"))  unnamed += 1 else named += 1
       case _ =>
     })
-    println(s"Named=$named Unamed=$unamed")
+    println(s"Named=$named Unnamed=$unnamed")
     named
   }
 

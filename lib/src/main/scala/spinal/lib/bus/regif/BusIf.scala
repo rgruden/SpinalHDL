@@ -335,7 +335,16 @@ trait BusIf extends BusIfBase {
           slice.wrErrorGenerator()
         }
         default {
-          reg_wrerr := Bool(accessDefaultError)
+          if(accessDefaultError){
+            reg_wrerr := True
+          } else {
+            if (withStrb) {
+              reg_wrerr := False
+            } else {
+              val alignreadhit = writeAddress.take(log2Up(wordAddressInc)).orR
+              reg_wrerr := Mux(alignreadhit, True, False)
+            }
+          }
         }
       }
       RamInsts.foreach { ram =>

@@ -141,4 +141,30 @@ class SpinalSimStreamShiftChainTester() extends SpinalSimFunSuite {
             dut
         }
     }
+
+    test("testClear") {
+        val length = 4
+        SimConfig.compile(new StreamShiftChain(UInt(8 bits), length)).doSim { dut =>
+            dut.clockDomain.forkStimulus(10)
+            dut.io.clear #= false
+            dut.io.pop.ready #= true
+
+            // Fill the pipeline
+            for (i <- 0 until length) {
+                dut.io.push.valid #= true
+                dut.io.push.payload #= i
+                dut.clockDomain.waitSampling()
+            }
+            dut.io.push.valid #= false
+
+            // Clear and verify pipeline is flushed
+            dut.io.clear #= true
+            dut.clockDomain.waitSampling()
+            dut.io.clear #= false
+            dut.clockDomain.waitSampling()
+
+            assert(!dut.io.pop.valid.toBoolean)
+            for (i <- 1 until length) assert(!dut.io.states(i).valid.toBoolean)
+        }
+    }
 }

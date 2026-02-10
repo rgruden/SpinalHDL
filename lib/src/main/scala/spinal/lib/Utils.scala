@@ -156,6 +156,11 @@ object Max {
     }
 }
 
+object Clamp {
+  def apply[T <: Data with Num[T]](num: T, low: T, high: T): T = Max(low, Min(num, high))
+  def apply[T <: Data with Num[T]](nums: Seq[T], low: T, high: T): Seq[T] = nums.map(apply(_, low, high))
+}
+
 object SetFromFirstOne{
   def apply[T <: Data](that : T, firstOrder: Int = LutInputs.get) : T = {
     val lutSize = firstOrder

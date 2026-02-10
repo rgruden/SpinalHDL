@@ -16,6 +16,7 @@ abstract class RegSlice(val name: String, val addr: BigInt, val doc: String, val
   protected val fields = ListBuffer[Field]()
   protected var fieldPtr: Int = 0
   protected var Rerror: Boolean = false
+  def nextAddr = addr + size
 
   /*
   * 1: access pass

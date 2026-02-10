@@ -51,6 +51,7 @@ case class Axi4Config(addressWidth : Int,
                       useProt      : Boolean = true,
                       useStrb      : Boolean = true,
                       useAllStrb   : Boolean = false,
+                      forceAxi4Len : Boolean = false,
                       arUserWidth  : Int = -1,
                       awUserWidth  : Int = -1,
                       rUserWidth   : Int = -1,
@@ -71,7 +72,7 @@ case class Axi4Config(addressWidth : Int,
   def useArwUser = arwUserWidth >= 0 //Shared AR/AW channel
   def arwUserWidth = Math.max(arUserWidth, awUserWidth)
   def sizeWidth = withAxi3.mux(4, 3)
-  def lenWidth = withAxi3.mux(4, 8)
+  def lenWidth = (withAxi3 && !forceAxi4Len).mux(4, 8)
   def lockWidth = withAxi3.mux(2, 1)
 
   if(useId)

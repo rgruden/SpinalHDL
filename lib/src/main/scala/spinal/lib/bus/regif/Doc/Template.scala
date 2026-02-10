@@ -120,11 +120,21 @@ object HtmlTemplate {
       |      a:hover {
       |          color:#09f;
       |      }
+      |      header, footer{
+      |          text-align: center;
+      |      }
+      |      .header-line th{
+      |          position: sticky;
+      |          text-align: center;
+      |          top: 0;
+      |          z-index: 10;
+      |          padding: 3px;
+      |      }
       |""".stripMargin
   def tableHead(hasBlock: Boolean = true) =
     s"""
       |      <thead>
-      |        <tr align="center" >${if(hasBlock)"\n          <th>ReUseBlock</th>" else ""}
+      |        <tr  class="header-line">${if(hasBlock)"\n          <th>ReUseBlock</th>" else ""}
       |          <th>Group</th>
       |          <th>AddressOffset</th>
       |          <th>Type</th>
@@ -158,7 +168,7 @@ object HtmlTemplate {
        |    </style>
        |  </head>
        |  <body>
-       |  <header align="center">
+       |  <header>
        |  <p class="regif-title"> ${moduleName} register interface </p>
        |  </header>
        |  <div class="table">
@@ -170,7 +180,7 @@ object HtmlTemplate {
        |      </tbody>
        |  </table>
        |  </div>
-       |  <footer align="center">
+       |  <footer>
        |  <div> <p class="info">Powered by <a href="https://spinalhdl.github.io/SpinalDoc-RTD/"> SpinalHDL </a> </p> </div>
        |  <div> <p class="info"> ${ju.Calendar.getInstance().getTime()} </p> </div>
        |  </footer>

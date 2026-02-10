@@ -63,6 +63,8 @@ dependencies {
 
 ### Mill(Build Tool)
 
+For mill version <= 0.11
+
 ```scala 
 import mill._
 import mill.scalalib._
@@ -76,6 +78,26 @@ object MySpinalModule extends ScalaModule {
   )
 
   def scalacPluginIvyDeps = Agg(ivy"com.github.spinalhdl::spinalhdl-idsl-plugin:1.6.4")
+}
+```
+
+For mill version >= 1.0.0
+
+```scala 
+//| mvnDeps:
+//| - com.typesafe:config:1.4.3
+import mill._
+import mill.scalalib._
+
+object MySpinalModule extends ScalaModule {
+  def scalaVersion = "2.11.12"
+
+  override def mvnDeps = Seq(
+    mvn"com.github.spinalhdl::spinalhdl-core:1.13.0",
+    mvn"com.github.spinalhdl::spinalhdl-lib:1.13.0"
+  )
+
+  override def scalacPluginMvnDeps = Seq(mvn"com.github.spinalhdl::spinalhdl-idsl-plugin:1.13.0")
 }
 ```
 

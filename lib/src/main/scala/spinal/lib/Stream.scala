@@ -761,132 +761,212 @@ class Stream[T <: Data](val payloadType :  HardType[T]) extends Bundle with IMas
 }
 
 object StreamArbiter {
+
   /** An Arbitration will choose which input stream to take at any moment. */
-  object Arbitration {
-    def lowerFirst(core: StreamArbiter[_ <: Data]) = new Area {
+  sealed trait ArbitrationPolicy {
+    def apply(core: StreamArbiter[_ <: Data]) = new Area {}
+  }
+
+  /**
+   * The arbiter will always choose the lowest numbered valid input, equally to a fixed priority arbiter.
+   */
+  object LowerFirst extends ArbitrationPolicy {
+    override def apply(core: StreamArbiter[_ <: Data]) = new Area {
       import core._
       maskProposal := OHMasking.first(Vec(io.inputs.map(_.valid)))
     }
+  }
 
-    /** This arbiter contains an implicit transactionLock */
-    def sequentialOrder(core: StreamArbiter[_]) = new Area {
+  /**
+   * The arbiter will choose inputs in a sequential order.
+   * This arbiter contains an implicit transactionLock
+  */
+  object SequentialOrder extends ArbitrationPolicy {
+    override def apply(core: StreamArbiter[_ <: Data]) = new Area {
       import core._
-      val counter = Counter(core.portCount, io.output.fire)
-      for (i <- 0 to core.portCount - 1) {
-        maskProposal(i) := False
+      if(portCount > 1) {
+        val counter = Counter(core.portCount, io.output.fire).setPartialName(this, "seqCounter")
+        for (i <- 0 until core.portCount) {
+          maskProposal(i) := False
+        }
+        maskProposal(counter) := True
       }
-      maskProposal(counter) := True
     }
+  }
 
-    def roundRobin(core: StreamArbiter[_ <: Data]) = new Area {
+  /**
+   * The arbiter will choose inputs in a round-robin fashion.
+   */
+  object RoundRobin extends ArbitrationPolicy {
+    override def apply(core: StreamArbiter[_ <: Data]) = new Area {
       import core._
-      for(bitId  <- maskLocked.range){
-        maskLocked(bitId) init(Bool(bitId == maskLocked.length-1))
+      if(maskLockFlagEnable) {
+        for(bitId  <- maskLocked.range){
+          maskLocked(bitId) init(Bool(bitId == maskLocked.length - 1))
+        }
+        //maskProposal := maskLocked
+        maskProposal := OHMasking.roundRobin(Vec(io.inputs.map(_.valid)),Vec(maskLocked.last +: maskLocked.take(maskLocked.length - 1)))
       }
-      //maskProposal := maskLocked
-      maskProposal := OHMasking.roundRobin(Vec(io.inputs.map(_.valid)),Vec(maskLocked.last +: maskLocked.take(maskLocked.length-1)))
     }
-    /** This arbiter requires that only one input is valid at any given time. */
-    def assumeOhInput(core: StreamArbiter[_ <: Data]) = new Area {
+  }
+
+  /**
+   * The arbiter will choose the valid input directly as the output.
+   * This arbiter requires that only one input is valid at any given time.
+  */
+  object AssumeOhInput extends ArbitrationPolicy {
+    override def apply(core: StreamArbiter[_ <: Data]) = new Area {
       import core._
-      exclusiveInputs = true
       (maskProposal, io.inputs).zipped.map(_ := _.valid)
     }
   }
 
   /** When a lock activates, the currently chosen input won't change until it is released. */
-  object Lock {
-    def none(core: StreamArbiter[_]) = new Area {
+  sealed trait LockPolicy {
+    def apply(core: StreamArbiter[_ <: Data]) = new Area {}
+  }
 
-    }
+  /**
+   * No lock is applied. The chosen input may change at any moment.
+   */
+  object NoLock extends LockPolicy {
 
-    /**
-     * Many handshaking protocols require that once valid is set, it must stay asserted and the payload
-     *  must not changed until the transaction fires, e.g. until ready is set as well. Since some arbitrations
-     *  may change their chosen input at any moment in time (which is not wrong), this may violate such
-     *  handshake protocols. Use this lock to be compliant in those cases.
-     */
-    def transactionLock(core: StreamArbiter[_]) = new Area {
+  }
+
+  /**
+   * Many handshaking protocols require that once valid is set, it must stay asserted and the payload
+   * must not change until the transaction fires, e.g. until ready is set as well. Since some arbitrations
+   * may change their chosen input at any moment in time (which is not wrong), this may violate such
+   * handshake protocols. Use this lock to be compliant in those cases.
+   */
+  object TransactionLock extends LockPolicy {
+    override def apply(core: StreamArbiter[_ <: Data]) = new Area {
       import core._
-      locked setWhen(io.output.valid)
-      locked.clearWhen(io.output.fire)
+      if(lockFlagEnable) {
+        locked setWhen(io.output.valid)
+        locked.clearWhen(io.output.fire)
+      }
     }
+  }
 
-    /**
-     * This lock ensures that once a fragmented transaction is started, it will be finished without
-     * interruptions from other streams. Without this, fragments of different streams will get intermingled.
-     * This is only relevant for fragmented streams.
-     */
-    def fragmentLock(core: StreamArbiter[_]) = new Area {
+  /**
+   * lock/unlock the output based on a user-defined function.
+   */
+  object SetLock extends LockPolicy {
+    var logic: (StreamArbiter[_ <: Data]) => Area = _
+    override def apply(core: StreamArbiter[_ <: Data]) = new Area {
+      logic(core).setWeakName("setLock")
+    }
+  }
+
+  /**
+   * Unlock the output when output payload meets a user-defined criteria.
+   */
+  object LambdaLock extends LockPolicy {
+    var unlock: Stream[_ <: Data] => Bool = _
+    override def apply(core: StreamArbiter[_ <: Data]) = new Area {
+      import core._
+      if(lockFlagEnable) {
+        locked setWhen(io.output.valid)
+        locked.clearWhen(io.output.fire && unlock(io.output))
+      }
+    }
+  }
+
+  /**
+   * This lock ensures that once a fragmented transaction is started, it will be finished without
+   * interruptions from other streams. Without this, fragments of different streams will get intermingled.
+   * This is only relevant for fragmented streams.
+   */
+  object FragmentLock extends LockPolicy {
+    override def apply(core: StreamArbiter[_ <: Data]) = new Area {
       val realCore = core.asInstanceOf[StreamArbiter[Fragment[_]]]
       import realCore._
-      locked setWhen(io.output.valid)
-      locked.clearWhen(io.output.fire && io.output.last)
+      if(lockFlagEnable) {
+        locked setWhen(io.output.valid)
+        locked.clearWhen(io.output.fire && io.output.last)
+      }
     }
   }
 }
 
 /** Arbitrate from several [[Stream]] to one with various algorithms.
- * 
+ *
  * A [[StreamArbiter]] is like a [[StreamMux]], but with built-in complex selection logic that can
  * arbitrate input streams based on a schedule or handle fragmented streams. 
- * 
+ *
  * Use a [[StreamArbiterFactory]] to create instances of this class.
  * @see [[https://spinalhdl.github.io/SpinalDoc-RTD/master/SpinalHDL/Libraries/stream.html#streamarbiter Stream documentation]]
  */
-class StreamArbiter[T <: Data](dataType: HardType[T], val portCount: Int)(val arbitrationFactory: (StreamArbiter[T]) => Area, val lockFactory: (StreamArbiter[T]) => Area) extends Component {
+class StreamArbiter[T <: Data](dataType: HardType[T],
+                              val portCount: Int,
+                              val arbitrationPolicy: StreamArbiter.ArbitrationPolicy,
+                              val lockPolicy: StreamArbiter.LockPolicy) extends Component {
   val io = new Bundle {
     val inputs = Vec(slave Stream (dataType),portCount)
     val output = master Stream (dataType)
     val chosen = out UInt (log2Up(portCount) bit)
     val chosenOH = out Bits (portCount bit)
   }
+  import StreamArbiter._
+  val lockFlagEnable = portCount > 1 && lockPolicy != NoLock && arbitrationPolicy != AssumeOhInput
+  var maskLockFlagEnable = lockFlagEnable
+  if(arbitrationPolicy == RoundRobin) maskLockFlagEnable = portCount > 1
 
-  val locked = RegInit(False).allowUnsetRegToAvoidLatch
-  var exclusiveInputs = false
+  val locked = ifGen(lockFlagEnable)(RegInit(False))
 
   val maskProposal = Vec(Bool(),portCount)
-  val maskLocked = Reg(Vec(Bool(),portCount))
-  val maskRouted = Mux(locked, maskLocked, maskProposal)
+  val maskLocked = ifGen(maskLockFlagEnable)(Reg(Vec(Bool(), portCount)))
+  val maskRouted = if(lockFlagEnable) Mux(locked, maskLocked, maskProposal) else maskProposal
 
 
-  when(io.output.valid) {
-    maskLocked := maskRouted
+  if(maskLockFlagEnable) {
+    when(io.output.valid) {
+      maskLocked := maskRouted
+    }
   }
 
-  val arbitration = arbitrationFactory(this)
-  val lock = lockFactory(this)
+  val arbitration = arbitrationPolicy(this)
+  val lock = lockPolicy(this)
 
-  io.output.valid := (io.inputs, maskRouted).zipped.map(_.valid & _).reduce(_ | _)
-  io.output.payload := MuxOH(maskRouted,Vec(io.inputs.map(_.payload)))
-  (io.inputs, maskRouted).zipped.foreach { case(input, mask) => input.ready := (Bool(exclusiveInputs) | mask) & io.output.ready }
+  val singlePort = (portCount == 1) generate new Area {
+    io.output << io.inputs.head
+    io.chosen := 0
+    io.chosenOH := 1
+  }
+  val multiPort = (portCount > 1) generate new Area {
+    io.output.valid := (io.inputs, maskRouted).zipped.map(_.valid & _).reduce(_ | _)
+    io.output.payload := MuxOH(maskRouted,Vec(io.inputs.map(_.payload)))
+    (io.inputs, maskRouted).zipped.foreach { case(input, mask) => input.ready := mask & io.output.ready }
 
-  io.chosenOH := maskRouted.asBits
-  io.chosen := OHToUInt(io.chosenOH)
+    io.chosenOH := maskRouted.asBits
+    io.chosen := OHToUInt(io.chosenOH)
+  }
 }
 
 /** Build a [[StreamArbiter]] from a list of [[Stream]].
-  * 
+  *
   * example:
   * {{{
   *   val streamA, streamB, streamC = Stream(Bits(8 bits))
   *   val arbiteredABC = StreamArbiterFactory.roundRobin.onArgs(streamA, streamB, streamC)
   *   val streamD, streamE, streamF = Stream(Bits(8 bits))
   *   val arbiteredDEF = StreamArbiterFactory.lowerFirst.noLock.onArgs(streamD, streamE, streamF)
-  * }}}   
-  * 
+  * }}}
+  *
   * @see [[https://spinalhdl.github.io/SpinalDoc-RTD/master/SpinalHDL/Libraries/stream.html#streamarbiter Stream documentation]]
   */
 class StreamArbiterFactory {
-  var arbitrationLogic: (StreamArbiter[_ <: Data]) => Area = StreamArbiter.Arbitration.lowerFirst
-  var lockLogic: (StreamArbiter[_ <: Data]) => Area = StreamArbiter.Lock.transactionLock
+  import StreamArbiter._
+  var arbitrationPolicy: ArbitrationPolicy = LowerFirst
+  var lockPolicy: LockPolicy = TransactionLock
 
   def build[T <: Data](dataType: HardType[T], portCount: Int): StreamArbiter[T] = {
-    new StreamArbiter(dataType, portCount)(arbitrationLogic, lockLogic)
+    new StreamArbiter(dataType, portCount, arbitrationPolicy, lockPolicy)
   }
 
   def buildOn[T <: Data](inputs : Seq[Stream[T]]): StreamArbiter[T] = {
-    val a = new StreamArbiter(inputs.head.payloadType, inputs.size)(arbitrationLogic, lockLogic)
+    val a = new StreamArbiter(inputs.head.payloadType, inputs.size, arbitrationPolicy, lockPolicy)
     (a.io.inputs, inputs).zipped.foreach(_ << _)
     a
   }
@@ -909,55 +989,73 @@ class StreamArbiterFactory {
 
   /** Configure the builder so lower ports have priority over higher ports */
   def lowerFirst: this.type = {
-    arbitrationLogic = StreamArbiter.Arbitration.lowerFirst
+    arbitrationPolicy = LowerFirst
     this
   }
 
-  /** Configure the builder for fair round robin arbitration */
+  /** Configure the builder for fair round-robin arbitration */
   def roundRobin: this.type = {
-    arbitrationLogic = StreamArbiter.Arbitration.roundRobin
+    arbitrationPolicy = RoundRobin
     this
   }
 
-  /** Configure the build to retrieve transaction in a sequential order.
-    * 
+  /** Configure the builder to retrieve transaction in a sequential order.
+    *
     * First transaction should come from port zero, then from port one, ...
     */
   def sequentialOrder: this.type = {
-    arbitrationLogic = StreamArbiter.Arbitration.sequentialOrder
-    this
-  }
-  def assumeOhInput: this.type = {
-    arbitrationLogic = StreamArbiter.Arbitration.assumeOhInput
+    arbitrationPolicy = SequentialOrder
     this
   }
 
+  /** Configure the builder to assume that only one input is valid at any given time.
+   * User is responsible to ensure this condition is met.
+   */
+  def assumeOhInput: this.type = {
+    arbitrationPolicy = AssumeOhInput
+    this
+  }
+
+  /** Configure the builder so the port selection could change based on user-defined logic.
+   */
   def setLock(body : (StreamArbiter[_ <: Data]) => Area) : this.type = {
-    lockLogic = body
+    SetLock.logic = body
+    lockPolicy = SetLock
     this
   }
 
   /** Configure the builder so the port selection could change every cycle,
     * even if the transaction on the selected port is not consumed.
     */
-  def noLock: this.type = setLock(StreamArbiter.Lock.none)
-  
-  /** Configure the builder so The port selection is locked until the transaction
-    * on the selected port is consumed.
-    */
-  def fragmentLock: this.type = setLock(StreamArbiter.Lock.fragmentLock)
+  def noLock: this.type = {
+    lockPolicy = NoLock
+    this
+  }
 
-  /** Configure the builder so the port selection is locked until the selected port finish is burst (last=True).
-    *
-    * Could be used to arbitrate `Stream[Flow[T]]`.
-    */
-  def transactionLock: this.type = setLock(StreamArbiter.Lock.transactionLock)
-  def lambdaLock[T <: Data](unlock: Stream[T] => Bool) : this.type = setLock{
-    case c : StreamArbiter[T] => new Area {
-      import c._
-      locked setWhen(io.output.valid)
-      locked.clearWhen(io.output.fire && unlock(io.output))
-    }
+  /** Configure the builder so the port selection is locked until the selected port finish its burst (last=True).
+   *
+   * Could be used to arbitrate `Stream[Fragment[T]]`.
+   */
+  def fragmentLock: this.type = {
+    lockPolicy = FragmentLock
+    this
+  }
+
+  /** Configure the builder so the port selection is locked until the transaction
+   * on the selected port is consumed.
+   */
+  def transactionLock: this.type = {
+    lockPolicy = TransactionLock
+    this
+  }
+
+  /** Configure the builder so the locked selection is released until the output meets the given criteria.
+   *
+   */
+  def lambdaLock[T <: Data](unlock: Stream[T] => Bool) : this.type = {
+    LambdaLock.unlock = unlock.asInstanceOf[Stream[_ <: Data] => Bool]
+    lockPolicy = LambdaLock
+    this
   }
 }
 
@@ -1241,8 +1339,10 @@ class StreamFork[T <: Data](dataType: HardType[T], portCount: Int, synchronous: 
 class StreamForkArea[T <: Data](input : Stream[T], outputs : Seq[Stream[T]], synchronous: Boolean = false) extends Area {
   val portCount = outputs.size
   /*Used for async, Store if an output stream already has taken its value or not */
-  val linkEnable = if(!synchronous)Vec(RegInit(True),portCount)else null
-  if (synchronous) {
+  val linkEnable = if(!synchronous && portCount > 1) Vec(RegInit(True), portCount) else null
+  if (portCount == 1) {
+    outputs.head << input
+  } else if (synchronous) {
     input.ready := outputs.map(_.ready).reduce(_ && _)
     outputs.foreach(_.valid := input.valid && input.ready)
     outputs.foreach(_.payload := input.payload)
@@ -1925,13 +2025,14 @@ class StreamShiftChain[T <: Data](dataType: HardType[T], length: Int) extends Co
     val push          = slave  Stream(dataType)
     val pop           = master Stream(dataType)
     val states        = Vec(master Flow(dataType), length)
+    val clear         = in Bool() default(False)
   }
 
   def builder(prev: Stream[T], left: Int): List[Stream[T]] = {
     left match {
       case 0 => Nil
       case 1 => prev :: Nil
-      case _ => prev :: builder(prev.stage(), left - 1)
+      case _ => prev :: builder(prev.m2sPipe(flush = io.clear), left - 1)
     }
   }
   val connections = Vec(builder(io.push, length))
@@ -2018,10 +2119,10 @@ object StreamWidthAdapter {
   def apply[T <: Data,T2 <: Data](input : Stream[T],output : Stream[T2], endianness: Endianness = LITTLE, padding : Boolean = false): Unit = {
     val inputWidth = widthOf(input.payload)
     val outputWidth = widthOf(output.payload)
-    if(inputWidth == outputWidth){
+    if(inputWidth == outputWidth) {
       output.arbitrationFrom(input)
       output.payload.assignFromBits(input.payload.asBits)
-    } else if(inputWidth > outputWidth){
+    } else if(inputWidth > outputWidth) new Composite(input, "widthAdapter") {
       require(inputWidth % outputWidth == 0 || padding)
       val factor = (inputWidth + outputWidth - 1) / outputWidth
       val paddedInputWidth = factor * outputWidth
@@ -2032,7 +2133,7 @@ object StreamWidthAdapter {
         case `BIG`    => output.payload.assignFromBits(input.payload.asBits.resize(paddedInputWidth).subdivideIn(factor slices).reverse.read(counter))
       }
       input.ready := output.ready && counter.willOverflowIfInc
-    } else{
+    } else new Composite(input, "widthAdapter"){
       require(outputWidth % inputWidth == 0 || padding)
       val factor  = (outputWidth + inputWidth - 1) / inputWidth
       val paddedOutputWidth = factor * inputWidth
