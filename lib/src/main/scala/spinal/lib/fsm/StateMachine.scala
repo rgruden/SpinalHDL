@@ -230,14 +230,16 @@ class StateMachine extends Area with StateMachineAccessor with ScalaLocated {
       }
     }
 
-    for(state <- states){
-      when(!isActive(state)){
+    for(state <- states) {
+      when(!isActive(state)) {
         state.whenInactiveTasks.foreach(_())
       }
-      val exit = Bool().setLambdaName(this.isNamed && state.isNamed)(this.getName +  "_onExit_" + enumOf(state).getName)
-      exit := isExiting(state)
-      when(exit){
-        state.onExitTasks.foreach(_())
+      if(state.onExitTasks.nonEmpty) {
+        val exit = Bool().setLambdaName(this.isNamed && state.isNamed)(this.getName +  "_onExit_" + enumOf(state).getName)
+        exit := isExiting(state)
+        when(exit) {
+          state.onExitTasks.foreach(_())
+        }
       }
     }
 
@@ -251,11 +253,13 @@ class StateMachine extends Area with StateMachineAccessor with ScalaLocated {
       }
     }
 
-    for(state <- states){
-      val entry = Bool().setLambdaName(this.isNamed && state.isNamed)(this.getName + "_onEntry_" + enumOf(state).getName)
-      entry := isEntering(state) 
-      when(entry) {
-        state.onEntryTasks.foreach(_())
+    for(state <- states) {
+      if(state.onEntryTasks.nonEmpty) {
+        val entry = Bool().setLambdaName(this.isNamed && state.isNamed)(this.getName + "_onEntry_" + enumOf(state).getName)
+        entry := isEntering(state)
+        when(entry) {
+          state.onEntryTasks.foreach(_())
+        }
       }
     }
 
@@ -283,11 +287,13 @@ class StateMachine extends Area with StateMachineAccessor with ScalaLocated {
           corruptedState := True
         }
       }
-      for(state <- states){
-        val entry = Bool().setLambdaName(this.isNamed && state.isNamed)(this.getName + "onEntry_" + enumOf(state).getName)
-        entry := isEntering(state)
-        when(entry) {
-          state.onEntryTasks.foreach(_())
+      for(state <- states) {
+        if(state.onEntryTasks.nonEmpty) {
+          val entry = Bool().setLambdaName(this.isNamed && state.isNamed)(this.getName + "onEntry_" + enumOf(state).getName)
+          entry := isEntering(state)
+          when(entry) {
+            state.onEntryTasks.foreach(_())
+          }
         }
       }
     }

@@ -94,5 +94,27 @@ class FiberPlugin extends Area with Hostable {
         }
       }
     }
+
+    def patch[T: ClassTag](body: => T): Handle[T] = spinal.core.fiber.Fiber patch {
+      pluginEnabled generate {
+        hostLock.await()
+        val onCreate = OnCreateStack.getOrElse(null)
+        host.rework {
+          OnCreateStack.set(onCreate)
+          body
+        }
+      }
+    }
+
+    def check[T: ClassTag](body: => T): Handle[T] = spinal.core.fiber.Fiber check {
+      pluginEnabled generate {
+        hostLock.await()
+        val onCreate = OnCreateStack.getOrElse(null)
+        host.rework {
+          OnCreateStack.set(onCreate)
+          body
+        }
+      }
+    }
   }
 }

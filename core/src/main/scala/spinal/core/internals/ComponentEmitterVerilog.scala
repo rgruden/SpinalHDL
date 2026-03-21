@@ -279,7 +279,7 @@ class ComponentEmitterVerilog(
     syncGroups.valuesIterator.foreach(emitSynchronous(component, _))
 
     component.dslBody.walkStatements{
-      case s: TreeStatement => s.algoIncrementale = algoIdIncrementalBase
+      case s: TreeStatement => s.algoIncremental = algoIdIncrementalBase
       case s                =>
     }
   }
@@ -321,9 +321,13 @@ class ComponentEmitterVerilog(
       logics ++= "  `endif\n"
     }
 
-    for((bt, str) <- withSimInit){
-      val name = emitReference(bt, false)
-      logics ++= s"${theme.maintab + theme.maintab}${name}${str};\n"
+    if(withSimInit.nonEmpty) {
+      logics ++= "  `ifndef SYNTHESIS\n"
+      for((bt, str) <- withSimInit){
+        val name = emitReference(bt, false)
+        logics ++= s"${theme.maintab + theme.maintab}${name}${str};\n"
+      }
+      logics ++= "  `endif\n"
     }
 
     for((bt, str) <- withInitBoot){
@@ -384,11 +388,11 @@ class ComponentEmitterVerilog(
 
       val instanceAttributes = emitSyntaxAttributes(child.instanceAttributes)
 
-      val istracingOff = child.hasTag(TracingOff)
+      val isTracingOff = child.hasTag(TracingOff)
 
       logics ++= commentTagsToString(child, "  //")
 
-      if(istracingOff){
+      if(isTracingOff) {
         logics ++= s" ${emitCommentAttributes(List(Verilator.tracing_off))} \n"
       }
 
@@ -494,7 +498,7 @@ class ComponentEmitterVerilog(
       logics ++= s"  );"
       logics ++= s"\n"
 
-      if(istracingOff){
+      if(isTracingOff){
         logics ++= s" ${emitCommentAttributes(List(Verilator.tracing_on))} \n"
       }
     }
