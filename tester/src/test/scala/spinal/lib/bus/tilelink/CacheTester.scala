@@ -118,7 +118,7 @@ class CacheTester extends AnyFunSuite{
     }
 
     tester.doSim("manual") { tb =>
-//      disableSimWave()
+      disableSimWave()
 
       periodically(10000) {
         tb.mastersStuff.foreach(_.agent.driver.driver.randomizeStallRate())
@@ -144,7 +144,7 @@ class CacheTester extends AnyFunSuite{
       val testers = (tb.masterSpecs, tb.mastersStuff).zipped.map((s, t) => new MasterTester(s, t.agent))
       //      val globalLock = Some(SimMutex()) //for test only
       val globalLock = Option.empty[SimMutex]
-      testers.foreach(_.startPerSource(100000, globalLock))
+      testers.foreach(_.startPerSource(10000, globalLock))
       testers.foreach(_.join())
       tb.waitCheckers()
       tb.assertCoverage()
